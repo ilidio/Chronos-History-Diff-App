@@ -1,19 +1,129 @@
 #!/bin/bash
-# Chronos History Diff App - Build and Package Script (macOS/Linux)
+# Chronos History Diff App - Generic Build and Package Script
+
+# --- Helper Functions ---
+
+# Function to detect the host OS and architecture
+get_host_os_and_arch() {
+  HOST_OS=""
+  HOST_ARCH=""
+
+  # Detect OS
+  case "$(uname -s)" in
+    Linux*)     HOST_OS="linux";;
+    Darwin*)    HOST_OS="mac";;
+    CYGWIN*|MINGW*|MSYS*) HOST_OS="win";; # Git Bash / MSYS2 on Windows
+    *)          HOST_OS="unknown"
+  esac
+
+  # Detect Architecture
+  case "$(uname -m)" in
+    x86_64)     HOST_ARCH="x64";;
+    arm64)      HOST_ARCH="arm64";; # macOS ARM
+    aarch64)    HOST_ARCH="arm64";; # Linux ARM
+    i386|i686)  HOST_ARCH="ia32";;
+    *)          HOST_ARCH="unknown"
+  esac
+
+  echo "Detected host OS: $HOST_OS, host architecture: $HOST_ARCH"
+}
+
+
+# Function to display help message
+display_help() {
+  echo "Usage: ./package.sh [TARGET_OS] [TARGET_ARCH]"
+  echo ""
+  echo "Builds and packages the Chronos History Diff App for the specified operating system and architecture."
+  echo ""
+  echo "Arguments:"
+  echo "  TARGET_OS    Specify the target operating system."
+  echo "               Possible values: win, mac, linux."
+  echo "               Defaults to the host OS if not provided."
+  echo ""
+  echo "  TARGET_ARCH  Specify the target architecture."
+  echo "               Possible values: x64, arm64, ia32."
+  echo "               Defaults to the host architecture if not provided."
+  echo ""
+  echo "Examples:"
+  echo "  ./package.sh                 # Builds for host OS and host architecture (e.g., mac arm64 on an M-series Mac)"
+  echo "  ./package.sh --help          # Display this help message"
+  echo ""
+  echo "  # Specific OS and Architecture combinations:"
+  echo "  ./package.sh mac arm64       # Builds for macOS ARM64 (Apple Silicon)"
+  echo "  ./package.sh win x64         # Builds for Windows x64 (typical desktop)"
+  echo "  ./package.sh linux arm64     # Builds for Linux ARM64 (e.g., Raspberry Pi)"
+  echo "  ./package.sh win ia32        # Builds for Windows 32-bit"
+  echo ""
+  echo "  # Specific OS, let architecture default to host's:"
+  echo "  ./package.sh mac             # Builds for macOS (e.g., arm64 on an M-series Mac, x64 on an Intel Mac)"
+  echo "  ./package.sh win             # Builds for Windows (e.g., arm64 on a Windows ARM VM, x64 on a Windows x64 machine)"
+  echo "  ./package.sh linux           # Builds for Linux (e.g., arm64 on a Linux ARM device, x64 on a Linux x64 machine)"
+  echo ""
+  echo "Cross-compilation Notes:"
+  echo "  - Building for 'mac' target typically requires running on a macOS host."
+  echo "  - Building for 'win' target from Linux/macOS may require 'wine' for specific features (e.g., code signing)."
+  echo "  - Building for 'linux' target generally works from any host."
+  exit 0
+}
+
+# --- Main Script Logic ---
+
+# Check for help flag
+if [[ "$1" == "help" || "$1" == "-h" || "$1" == "--help" ]]; then
+  display_help
+fi
+
+# Detect host OS and architecture for defaults
+get_host_os_and_arch
+DEFAULT_OS="$HOST_OS"
+DEFAULT_ARCH="$HOST_ARCH"
+
+# Parse arguments
+TARGET_OS="${1:-$DEFAULT_OS}" # Use first arg or default to host OS
+TARGET_ARCH="${2:-$DEFAULT_ARCH}" # Use second arg or default to host architecture
+
+# If no arguments were given, and defaults are 'unknown', display help
+if [[ "$#" -eq 0 && ("$DEFAULT_OS" == "unknown" || "$DEFAULT_ARCH" == "unknown") ]]; then
+  echo "Error: Could not determine host OS or architecture. Please specify TARGET_OS and TARGET_ARCH."
+  display_help
+fi
+
+echo "Building for target OS: $TARGET_OS, target architecture: $TARGET_ARCH"
 
 # Ensure clean build
-echo "Cleaning dist folder..."
+echo "Cleaning dist and out folders..."
 rm -rf dist/
 rm -rf out/
 
-# Build Next.js static export
+# Build Next.js application
 echo "Building Next.js application..."
-npm run build -- --webpack
+npm run build -- --webpack || { echo "Next.js build failed. Exiting."; exit 1; }
 
 # Package with Electron Builder
-echo "Packaging application..."
-npx electron-builder
+echo "Packaging application with Electron Builder..."
+BUILDER_CMD="npx electron-builder"
+
+case "$TARGET_OS" in
+  win)   BUILDER_CMD+=" --win";;
+  mac)   BUILDER_CMD+=" --mac";;
+  linux) BUILDER_CMD+=" --linux";;
+  *)     echo "Error: Unsupported TARGET_OS '$TARGET_OS'. Exiting."; exit 1;;
+esac
+
+case "$TARGET_ARCH" in
+  x64|arm64|ia32) BUILDER_CMD+=" --arch $TARGET_ARCH";;
+  *)              echo "Error: Unsupported TARGET_ARCH '$TARGET_ARCH'. Exiting."; exit 1;;
+esac
+
+eval "$BUILDER_CMD" || { echo "Electron Builder packaging failed. Exiting."; exit 1; }
 
 # Show final size
 echo "Build complete! Checking final installer sizes in dist/:"
-ls -lh dist/*.dmg dist/*.pkg dist/*.AppImage dist/*.deb dist/*.rpm 2>/dev/null || du -sh dist/
+case "$TARGET_OS" in
+  win)   ls -lh dist/*.exe dist/*.msi 2>/dev/null || du -sh dist/ ;;
+  mac)   ls -lh dist/*.dmg dist/*.pkg 2>/dev/null || du -sh dist/ ;;
+  linux) ls -lh dist/*.AppImage dist/*.deb dist/*.rpm 2>/dev/null || du -sh dist/ ;;
+  *)     echo "Unknown target OS, cannot list specific installers. Showing general dist size:"; du -sh dist/ ;;
+esac
+
+echo "Done."
