@@ -23,6 +23,7 @@ dist/
 build/
 target/
 server-dist/
+dist_archive/
 
 # Dependency directories
 bower_components/
