@@ -90,9 +90,8 @@ fi
 
 echo "Building for target OS: $TARGET_OS, target architecture: $TARGET_ARCH"
 
-# Ensure clean build
-echo "Cleaning dist and out folders..."
-rm -rf dist/
+# Ensure clean build (only out/, as dist/ will be used as a temporary staging area)
+echo "Cleaning out folder..."
 rm -rf out/
 
 # Build Next.js application
@@ -101,6 +100,10 @@ npm run build -- --webpack || { echo "Next.js build failed. Exiting."; exit 1; }
 
 # Package with Electron Builder
 echo "Packaging application with Electron Builder..."
+# First, ensure the temporary 'dist' folder is clean for this build process
+rm -rf dist/
+mkdir -p dist/ # Create it so electron-builder has a place to put its temporary files
+
 BUILDER_CMD="npx electron-builder"
 
 case "$TARGET_OS" in
@@ -111,19 +114,28 @@ case "$TARGET_OS" in
 esac
 
 case "$TARGET_ARCH" in
-  x64|arm64|ia32) BUILDER_CMD+=" --arch $TARGET_ARCH";;
+  x64) BUILDER_CMD+=" --x64";;
+  arm64) BUILDER_CMD+=" --arm64";;
+  ia32) BUILDER_CMD+=" --ia32";;
   *)              echo "Error: Unsupported TARGET_ARCH '$TARGET_ARCH'. Exiting."; exit 1;;
 esac
 
 eval "$BUILDER_CMD" || { echo "Electron Builder packaging failed. Exiting."; exit 1; }
 
-# Show final size
-echo "Build complete! Checking final installer sizes in dist/:"
+# Archive the build artifacts
+ARCHIVE_DIR="dist_archive/${TARGET_OS}-${TARGET_ARCH}"
+echo "Archiving build artifacts to $ARCHIVE_DIR..."
+mkdir -p "$ARCHIVE_DIR"
+mv dist/* "$ARCHIVE_DIR/" || { echo "Failed to archive build artifacts."; exit 1; }
+rm -rf dist/ # Clean up the temporary dist folder
+
+# Show final size (from the archived directory)
+echo "Build complete! Checking final installer sizes in $ARCHIVE_DIR/:"
 case "$TARGET_OS" in
-  win)   ls -lh dist/*.exe dist/*.msi 2>/dev/null || du -sh dist/ ;;
-  mac)   ls -lh dist/*.dmg dist/*.pkg 2>/dev/null || du -sh dist/ ;;
-  linux) ls -lh dist/*.AppImage dist/*.deb dist/*.rpm 2>/dev/null || du -sh dist/ ;;
-  *)     echo "Unknown target OS, cannot list specific installers. Showing general dist size:"; du -sh dist/ ;;
+  win)   ls -lh "$ARCHIVE_DIR"/*.exe "$ARCHIVE_DIR"/*.msi 2>/dev/null || du -sh "$ARCHIVE_DIR" ;;
+  mac)   ls -lh "$ARCHIVE_DIR"/*.dmg "$ARCHIVE_DIR"/*.pkg 2>/dev/null || du -sh "$ARCHIVE_DIR" ;;
+  linux) ls -lh "$ARCHIVE_DIR"/*.AppImage "$ARCHIVE_DIR"/*.deb "$ARCHIVE_DIR"/*.rpm 2>/dev/null || du -sh "$ARCHIVE_DIR" ;;
+  *)     echo "Unknown target OS, cannot list specific installers. Showing general archive size:"; du -sh "$ARCHIVE_DIR" ;;
 esac
 
 echo "Done."
