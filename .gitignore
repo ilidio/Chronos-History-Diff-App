@@ -24,6 +24,7 @@ build/
 target/
 server-dist/
 dist_archive/
+dist_archive/**/*.exe
 
 # Dependency directories
 bower_components/
