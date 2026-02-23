@@ -26,14 +26,16 @@ interface TreeNode {
 }
 
 const buildTree = (files: FileEntry[], rootPath: string): TreeNode => {
-  const root: TreeNode = { name: 'root', path: rootPath, children: {}, isDir: true, fileChildren: [] };
+  const normalizedRootPath = rootPath.replace(/\\/g, '/');
+  const root: TreeNode = { name: 'root', path: normalizedRootPath, children: {}, isDir: true, fileChildren: [] };
 
   files.forEach(file => {
+    const normalizedFilePath = file.path.replace(/\\/g, '/');
     // Calculate relative path from root
-    let relativePath = file.path;
-    if (file.path.startsWith(rootPath)) {
-        relativePath = file.path.substring(rootPath.length);
-        if (relativePath.startsWith('/') || relativePath.startsWith('\\')) {
+    let relativePath = normalizedFilePath;
+    if (normalizedFilePath.startsWith(normalizedRootPath)) {
+        relativePath = normalizedFilePath.substring(normalizedRootPath.length);
+        if (relativePath.startsWith('/')) {
             relativePath = relativePath.substring(1);
         }
     }
