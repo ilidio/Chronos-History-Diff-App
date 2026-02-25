@@ -64,7 +64,7 @@ export default function GrepSearchDialog({ open, onOpenChange, repoPath, onCommi
                     </Button>
                 </div>
 
-                <ScrollArea className="flex-1 border rounded-md bg-muted/20">
+                <ScrollArea className="flex-1 min-h-0 border rounded-md bg-muted/20">
                     <div className="p-2 space-y-2">
                         {results.length === 0 && !loading && (
                             <div className="text-center text-muted-foreground py-8">No results. Enter a pattern to start deep searching.</div>

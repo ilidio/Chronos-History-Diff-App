@@ -530,8 +530,8 @@ export default function Home() {
             </div>
         </div>
 
-        <ScrollArea className="flex-1 overflow-hidden">
-            <div className="p-2 min-h-full">
+        <ScrollArea className="flex-1 h-full min-h-0 overflow-hidden">
+            <div className="p-2">
                 <ExplorerTree
                     files={filteredFiles}
                     selectedFile={selectedFile}
@@ -645,8 +645,8 @@ export default function Home() {
               {/* Overlay Body (Side by Side) */}
               <div className="flex-1 flex overflow-hidden">
                   {/* Left: History Timeline */}
-                  <div className="w-80 border-r flex flex-col bg-muted/5 flex-shrink-0">
-                      <div className="p-3 border-b bg-background/50 flex flex-col gap-3">
+                  <div className="w-80 border-r flex flex-col bg-muted/5 flex-shrink-0 h-full min-h-0">
+                      <div className="p-3 border-b bg-background/50 flex flex-col gap-3 flex-shrink-0">
                           <div className="flex items-center justify-between">
                               <span className="text-xs font-bold uppercase tracking-wider text-muted-foreground">
                                   {isFilteringBySelection ? 'Filtered Results' : (historyMode === 'local' ? 'Chronos Snapshots' : 'Git Commits')}
@@ -707,19 +707,18 @@ export default function Home() {
                           )}
                       </div>
                       
-                      <ScrollArea className="flex-1">
-                          <div className="min-h-full">
-                              {historyMode === 'local' ? (
-                                  <ChronosHistoryList 
-                                      snapshots={isFilteringBySelection ? selectionLocalHistory : fileHistory}
-                                      selectedSnapshotId={selectedSnapshot?.id || null}
-                                      pinnedId={pinnedVersion?.id || null}
-                                      onSnapshotClick={onSnapshotClick}
-                                      onPinClick={handlePinSnapshot}
-                                  />
-                              ) : (
-                                  <div className="space-y-1 p-2">
-                                      {(isFilteringBySelection ? selectionGitHistory : gitHistory).map((commit, idx) => (
+                      <ScrollArea className="flex-1 h-full min-h-0">
+                          {historyMode === 'local' ? (
+                              <ChronosHistoryList 
+                                  snapshots={isFilteringBySelection ? selectionLocalHistory : fileHistory}
+                                  selectedSnapshotId={selectedSnapshot?.id || null}
+                                  pinnedId={pinnedVersion?.id || null}
+                                  onSnapshotClick={onSnapshotClick}
+                                  onPinClick={handlePinSnapshot}
+                              />
+                          ) : (
+                              <div className="space-y-1 p-2">
+                                  {(isFilteringBySelection ? selectionGitHistory : gitHistory).map((commit, idx) => (
                                           <div
                                               key={`${commit.id}-${idx}`}
                                               className={`flex flex-col p-2 rounded cursor-pointer text-sm border transition-colors group relative ${
@@ -770,7 +769,6 @@ export default function Home() {
                                       )}
                                   </div>
                               )}
-                          </div>
                       </ScrollArea>
                   </div>
 

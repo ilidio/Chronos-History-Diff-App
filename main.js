@@ -3,6 +3,7 @@ const path = require('path');
 const { spawn, exec } = require('child_process');
 const fs = require('fs');
 const glob = require('glob');
+const minimatch = require('minimatch');
 
 app.commandLine.appendSwitch('ignore-certificate-errors');
 
@@ -157,6 +158,34 @@ function runGit(command, repoPath, options = { trim: true }) {
           }
       });
   });
+}
+
+function getAppSettingsPath() {
+    const userDataPath = app.getPath('userData');
+    return path.join(userDataPath, 'chronos-app-settings.json');
+}
+
+async function readAppSettings() {
+    const settingsPath = getAppSettingsPath();
+    try {
+        if (fs.existsSync(settingsPath)) {
+            const data = await fs.promises.readFile(settingsPath, 'utf8');
+            return JSON.parse(data);
+        }
+    } catch (e) {
+        console.error("Failed to read app settings:", e);
+    }
+    return {}; // Return empty object if file not found or parsing fails
+}
+
+async function writeAppSettings(settings) {
+    const settingsPath = getAppSettingsPath();
+    try {
+        await fs.promises.writeFile(settingsPath, JSON.stringify(settings, null, 2), 'utf8');
+    } catch (e) {
+        console.error("Failed to write app settings:", e);
+        throw e;
+    }
 }
 
 async function createWindow() {
@@ -315,8 +344,11 @@ app.whenReady().then(() => {
       return await runGit(command, repoPath);
   });
 
-  ipcMain.handle('git:log', async (_, { repoPath, count }) => {
-      const command = `git log -n ${count || 50} --pretty=format:"%H|%an|%ad|%s" --date=iso`;
+  ipcMain.handle('git:log', async (_, { repoPath, count, filePath }) => {
+      let command = `git log -n ${count || 50} --pretty=format:"%H|%an|%ad|%s" --date=iso`;
+      if (filePath) {
+          command += ` -- "${filePath}"`;
+      }
       return await runGit(command, repoPath);
   });
 
@@ -330,10 +362,26 @@ app.whenReady().then(() => {
       return await runGit(command, repoPath);
   });
 
-  ipcMain.handle('git:branches', async (_, repoPath) => {
-      // Format: objectname|refname|* if current
+  ipcMain.handle('git:branches', async (_, data) => {
+      const repoPath = typeof data === 'string' ? data : data.repoPath;
+      const filePath = typeof data === 'object' ? data.filePath : null;
+
       const command = `git for-each-ref --format="%(objectname)|%(refname)|%(HEAD)" refs/heads/ refs/remotes/`;
-      return await runGit(command, repoPath);
+      const output = await runGit(command, repoPath);
+      
+      if (!filePath) return output;
+
+      // Filter branches that have changes in filePath compared to HEAD
+      const lines = output.split('\n').filter(l => l);
+      const results = await Promise.all(lines.map(async line => {
+          const [commitId, refName, head] = line.split('|');
+          if (head === '*') return line;
+          try {
+              const diff = await runGit(`git log -n 1 HEAD...${refName} -- "${filePath}"`, repoPath);
+              return diff ? line : null;
+          } catch (e) { return null; }
+      }));
+      return results.filter(Boolean).join('\n');
   });
 
   ipcMain.handle('git:config', async (_, repoPath) => {
@@ -659,6 +707,30 @@ Summary:`;
           });
       });
   });
+
+  // Chronos Excludes IPC handlers
+  ipcMain.handle('chronos:getExcludes', async () => {
+      const settings = await readAppSettings();
+      return settings.excludes || [];
+  });
+
+  ipcMain.handle('chronos:setExcludes', async (_, excludes) => {
+      const settings = await readAppSettings();
+      settings.excludes = excludes;
+      await writeAppSettings(settings);
+  });
+
+  // Utility function to check if a path is excluded
+  function isPathExcluded(filePath, excludes) {
+      const normalizedFilePath = path.normalize(filePath).replace(/\\/g, '/'); // Normalize and ensure forward slashes for minimatch
+      for (const pattern of excludes) {
+          if (minimatch.minimatch(normalizedFilePath, pattern, { dot: true })) { // dot: true to match dotfiles
+              return true;
+          }
+      }
+      return false;
+  }
+
 
   createWindow();
 });

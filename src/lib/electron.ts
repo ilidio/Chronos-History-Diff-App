@@ -111,8 +111,8 @@ export async function getFileHistory(repoPath: string, filePath: string): Promis
     return safeInvoke('git:fileHistory', { repoPath, filePath });
 }
 
-export async function getLog(repoPath: string, count = 50): Promise<any[]> {
-    const output = await safeInvoke('git:log', { repoPath, count });
+export async function getLog(repoPath: string, count = 50, filePath?: string): Promise<any[]> {
+    const output = await safeInvoke('git:log', { repoPath, count, filePath });
     if (!output) return [];
     return output.split('\n')
         .filter((l: string) => l.includes('|'))
@@ -137,8 +137,8 @@ export async function getRepoStatus(repoPath: string): Promise<any> {
     return { files };
 }
 
-export async function getBranches(repoPath: string): Promise<any[]> {
-    const output = await safeInvoke('git:branches', repoPath);
+export async function getBranches(repoPath: string, filePath?: string): Promise<any[]> {
+    const output = await safeInvoke('git:branches', { repoPath, filePath });
     if (!output) return [];
     return output.split('\n').filter((l: string) => l).map((line: string) => {
         const [commitId, refName, head] = line.split('|');

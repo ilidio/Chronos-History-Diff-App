@@ -46,7 +46,7 @@ export default function FileHistoryDialog({ open, onOpenChange, repoPath, filePa
                         Timeline of changes for this specific file.
                     </DialogDescription>
                 </DialogHeader>
-                <ScrollArea className="flex-1">
+                <ScrollArea className="flex-1 min-h-0">
                     {loading ? (
                         <div className="flex justify-center p-8"><Loader2 className="animate-spin" /></div>
                     ) : (

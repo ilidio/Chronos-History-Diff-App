@@ -40,6 +40,7 @@ export default function CompareFilesDialog({ open, onOpenChange, repoPath, initi
     const [repoHistory, setRepoHistory] = useState<any[]>([]);
     const [historySnapshots, setHistorySnapshots] = useState<any[]>([]);
     const [gitTab, setGitTab] = useState<'branches' | 'file' | 'repo'>('branches');
+    const [filterByFile, setFilterByFile] = useState(false);
     
     const [limitToSelection, setLimitToSelection] = useState(false);
     const [selectionRange, setSelectionRange] = useState<{ startLine: number, endLine: number } | null>(null);
@@ -71,6 +72,7 @@ export default function CompareFilesDialog({ open, onOpenChange, repoPath, initi
             setDiffData(null);
             setEditableContent(null);
             setIsHeaderVisible(true);
+            setFilterByFile(false);
         }
     }, [open, initialFileA, initialRange, repoPath]);
 
@@ -81,9 +83,12 @@ export default function CompareFilesDialog({ open, onOpenChange, repoPath, initi
         } catch (e) { console.error(e); }
     };
 
-    const loadBranches = async () => {
+    const loadBranches = async (forceFilter?: boolean, typeOverride?: string) => {
         try {
-            const b = await getBranches(repoPath);
+            const shouldFilter = forceFilter ?? filterByFile;
+            const type = typeOverride || pickingType;
+            const currentPath = type === 'refA' ? pathA : pathB;
+            const b = await getBranches(repoPath, shouldFilter && currentPath ? getRelativePath(currentPath) : undefined);
             setBranches(b);
         } catch (e) { console.error(e); }
     };
@@ -123,9 +128,12 @@ export default function CompareFilesDialog({ open, onOpenChange, repoPath, initi
         } catch (e) { console.error(e); }
     };
 
-    const loadRepoHistory = async () => {
+    const loadRepoHistory = async (forceFilter?: boolean, typeOverride?: string) => {
         try {
-            const output = await getLog(repoPath, 50);
+            const shouldFilter = forceFilter ?? filterByFile;
+            const type = typeOverride || pickingType;
+            const currentPath = type === 'refA' ? pathA : pathB;
+            const output = await getLog(repoPath, 50, shouldFilter && currentPath ? getRelativePath(currentPath) : undefined);
             setRepoHistory(output);
         } catch (e) { console.error(e); }
     };
@@ -264,7 +272,7 @@ export default function CompareFilesDialog({ open, onOpenChange, repoPath, initi
                                     {modeA === 'git' && (
                                         <div className="relative w-40">
                                             <Input placeholder="Ref..." value={refA} onChange={e => setRefA(e.target.value)} onKeyDown={e => e.key === 'Enter' && handleCompare()} className="h-9 text-sm pr-8" />
-                                            <Button variant="ghost" size="sm" className="absolute right-0 top-0 h-full px-2" onClick={() => { loadBranches(); loadRepoHistory(); if (pathA) loadGitHistory(pathA); setGitTab(pathA ? 'file' : 'branches'); setPickingType('refA'); }}><GitBranch className="h-3 w-3" /></Button>
+                                            <Button variant="ghost" size="sm" className="absolute right-0 top-0 h-full px-2" onClick={() => { setPickingType('refA'); loadBranches(filterByFile, 'refA'); loadRepoHistory(filterByFile, 'refA'); if (pathA) loadGitHistory(pathA); setGitTab(pathA ? 'file' : 'branches'); }}><GitBranch className="h-3 w-3" /></Button>
                                         </div>
                                     )}
                                     {modeA === 'history' && (
@@ -285,7 +293,7 @@ export default function CompareFilesDialog({ open, onOpenChange, repoPath, initi
                                     {modeB === 'git' && (
                                         <div className="relative w-40">
                                             <Input placeholder="Ref..." value={refB} onChange={e => setRefB(e.target.value)} onKeyDown={e => e.key === 'Enter' && handleCompare()} className="h-9 text-sm pr-8" />
-                                            <Button variant="ghost" size="sm" className="absolute right-0 top-0 h-full px-2" onClick={() => { loadBranches(); loadRepoHistory(); if (pathB) loadGitHistory(pathB); setGitTab(pathB ? 'file' : 'branches'); setPickingType('refB'); }}><GitBranch className="h-3 w-3" /></Button>
+                                            <Button variant="ghost" size="sm" className="absolute right-0 top-0 h-full px-2" onClick={() => { setPickingType('refB'); loadBranches(filterByFile, 'refB'); loadRepoHistory(filterByFile, 'refB'); if (pathB) loadGitHistory(pathB); setGitTab(pathB ? 'file' : 'branches'); }}><GitBranch className="h-3 w-3" /></Button>
                                         </div>
                                     )}
                                     {modeB === 'history' && (
@@ -327,20 +335,28 @@ export default function CompareFilesDialog({ open, onOpenChange, repoPath, initi
                 {pickingType && (
                     <div className="absolute inset-0 bg-background/95 z-[110] p-6 animate-in fade-in duration-200 flex flex-col">
                         <div className="flex items-center justify-between mb-4">
-                            <div className="flex flex-col gap-1">
+                            <div className="flex flex-col gap-1 w-full">
                                 <h3 className="font-bold uppercase tracking-widest text-xs opacity-70">{pickingType.startsWith('file') ? 'Select File' : pickingType.startsWith('ref') ? 'Select Git' : 'Select Snapshot'}</h3>
                                 {pickingType.startsWith('ref') && (
-                                    <div className="flex bg-muted/50 p-1 rounded-lg mt-2">
-                                        <button onClick={() => setGitTab('branches')} className={`px-4 py-1.5 text-[10px] uppercase font-bold rounded-md ${gitTab === 'branches' ? 'bg-background text-primary shadow-sm' : 'text-muted-foreground'}`}>Branches</button>
-                                        <button onClick={() => setGitTab('file')} className={`px-4 py-1.5 text-[10px] uppercase font-bold rounded-md ${gitTab === 'file' ? 'bg-background text-primary shadow-sm' : 'text-muted-foreground'}`}>File History</button>
-                                        <button onClick={() => setGitTab('repo')} className={`px-4 py-1.5 text-[10px] uppercase font-bold rounded-md ${gitTab === 'repo' ? 'bg-background text-primary shadow-sm' : 'text-muted-foreground'}`}>Repo History</button>
+                                    <div className="flex items-center justify-between w-full mt-2">
+                                        <div className="flex bg-muted/50 p-1 rounded-lg">
+                                            <button onClick={() => setGitTab('branches')} className={`px-4 py-1.5 text-[10px] uppercase font-bold rounded-md ${gitTab === 'branches' ? 'bg-background text-primary shadow-sm' : 'text-muted-foreground'}`}>Branches</button>
+                                            <button onClick={() => setGitTab('file')} className={`px-4 py-1.5 text-[10px] uppercase font-bold rounded-md ${gitTab === 'file' ? 'bg-background text-primary shadow-sm' : 'text-muted-foreground'}`}>File History</button>
+                                            <button onClick={() => setGitTab('repo')} className={`px-4 py-1.5 text-[10px] uppercase font-bold rounded-md ${gitTab === 'repo' ? 'bg-background text-primary shadow-sm' : 'text-muted-foreground'}`}>Repo History</button>
+                                        </div>
+                                        {(gitTab === 'branches' || gitTab === 'repo') && (
+                                            <label className="flex items-center gap-2 cursor-pointer bg-primary/5 px-3 py-1.5 rounded-lg border border-primary/10 hover:bg-primary/10 transition-colors animate-in fade-in slide-in-from-right-2">
+                                                <input type="checkbox" checked={filterByFile} onChange={e => { setFilterByFile(e.target.checked); loadBranches(e.target.checked); loadRepoHistory(e.target.checked); }} className="h-3 w-3 accent-primary" />
+                                                <span className="text-[10px] font-bold text-primary uppercase tracking-tight">Filter by current file</span>
+                                            </label>
+                                        )}
                                     </div>
                                 )}
                             </div>
-                            <Button variant="ghost" size="sm" onClick={() => setPickingType(null)}><X className="h-4 w-4" /></Button>
+                            <Button variant="ghost" size="sm" onClick={() => setPickingType(null)} className="ml-4"><X className="h-4 w-4" /></Button>
                         </div>
-                        <Command className="rounded-lg border shadow-xl overflow-hidden h-full flex flex-col bg-background">
-                            <CommandInput placeholder="Search..." autoFocus className="h-12" />
+                        <Command className="rounded-lg border shadow-xl overflow-hidden flex-1 min-h-0 flex flex-col bg-background">
+                            <CommandInput placeholder="Search..." autoFocus className="h-12 flex-shrink-0" />
                             <CommandList className="flex-1 overflow-y-auto p-2">
                                 <CommandEmpty>No results found.</CommandEmpty>
                                 {(pickingType === 'refA' || pickingType === 'refB') && (

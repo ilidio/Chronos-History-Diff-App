@@ -9,18 +9,17 @@ describe('electron lib wrappers', () => {
   });
 
   it('getLog invokes git:log and parses output', async () => {
-    ipcRenderer.invoke.mockResolvedValue('SHA1|Author1|Date1|Msg1|G\nSHA2|Author2|Date2|Msg2|N');
+    ipcRenderer.invoke.mockResolvedValue('SHA1|Author1|Date1|Msg1\nSHA2|Author2|Date2|Msg2');
     
-    const log = await electron.getLog('/path', 10);
+    const log = await electron.getLog('/path', 10, 'file.txt');
     
-    expect(ipcRenderer.invoke).toHaveBeenCalledWith('git:log', { repoPath: '/path', count: 10 });
+    expect(ipcRenderer.invoke).toHaveBeenCalledWith('git:log', { repoPath: '/path', count: 10, filePath: 'file.txt' });
     expect(log).toHaveLength(2);
     expect(log[0]).toEqual({
       id: 'SHA1',
       author: 'Author1',
       timestamp: 'Date1',
-      message: 'Msg1',
-      signature: 'G'
+      message: 'Msg1'
     });
   });
 
@@ -39,9 +38,9 @@ describe('electron lib wrappers', () => {
   it('getBranches invokes git:branches and parses output', async () => {
     ipcRenderer.invoke.mockResolvedValue('SHA1|refs/heads/master|*\nSHA2|refs/remotes/origin/main| ');
     
-    const branches = await electron.getBranches('/path');
+    const branches = await electron.getBranches('/path', 'file.txt');
     
-    expect(ipcRenderer.invoke).toHaveBeenCalledWith('git:branches', '/path');
+    expect(ipcRenderer.invoke).toHaveBeenCalledWith('git:branches', { repoPath: '/path', filePath: 'file.txt' });
     expect(branches).toHaveLength(2);
     expect(branches[0]).toEqual({ name: 'master', commitId: 'SHA1', isCurrentRepositoryHead: true, isRemote: false });
     expect(branches[1]).toEqual({ name: 'origin/main', commitId: 'SHA2', isCurrentRepositoryHead: false, isRemote: true });
