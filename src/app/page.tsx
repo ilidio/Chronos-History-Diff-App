@@ -342,14 +342,16 @@ export default function Home() {
            );
            setDiffData(result);
        } else {
-           console.log(`Comparing Git Commit: ${commit.id} VS Working: ${relativePath}`);
+           // Default: Compare commit with its parent (Commit N vs Commit N-1)
+           // If we use refA = commit^ and refB = commit, we see what changed IN the commit.
+           console.log(`Comparing Git Commit: ${commit.id} VS its Parent`);
            const result = await compareFiles(
                repoPath,
-               relativePath, commit.id,
-               relativePath, null
+               relativePath, `${commit.id}^`,
+               relativePath, commit.id
            );
            setDiffData(result);
-           setModifiedContent(result.modified);
+           // Content from git commits is read-only by default in the app logic
        }
     } catch (e: any) {
         console.error("Git Diff Error:", e);
@@ -763,6 +765,31 @@ export default function Home() {
                                                       title={pinnedVersion?.id === commit.id ? "Unpin Base Version" : "Pin as Base Version for Comparison"}
                                                   >
                                                       {pinnedVersion?.id === commit.id ? <PinOff className="h-3 w-3" /> : <Pin className="h-3 w-3" />}
+                                                  </button>
+
+                                                  <button 
+                                                      className="absolute right-8 top-2 p-1 rounded hover:bg-primary/20 text-muted-foreground hover:text-primary opacity-0 group-hover:opacity-100 transition-opacity"
+                                                      onClick={async (e) => {
+                                                          e.stopPropagation();
+                                                          setSelectedCommit(commit);
+                                                          setSelectedSnapshot(null);
+                                                          setLoading(true);
+                                                          try {
+                                                              let relativePath = selectedFile;
+                                                              if (selectedFile.startsWith(repoPath)) {
+                                                                  relativePath = selectedFile.substring(repoPath.length);
+                                                                  if (relativePath.startsWith('/') || relativePath.startsWith('\\')) {
+                                                                      relativePath = relativePath.substring(1);
+                                                                  }
+                                                              }
+                                                              const result = await compareFiles(repoPath, relativePath, commit.id, relativePath, null);
+                                                              setDiffData(result);
+                                                              setModifiedContent(result.modified);
+                                                          } catch (e: any) { setError(e.message); } finally { setLoading(false); }
+                                                      }}
+                                                      title="Compare this version with Working Copy"
+                                                  >
+                                                      <ArrowRightLeft className="h-3 w-3" />
                                                   </button>
                                               </div>
                                               <div className="text-xs text-foreground/80 line-clamp-2 pl-7" title={commit.message}>

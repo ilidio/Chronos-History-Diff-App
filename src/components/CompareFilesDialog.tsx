@@ -89,7 +89,15 @@ export default function CompareFilesDialog({ open, onOpenChange, repoPath, initi
             const type = typeOverride || pickingType;
             const currentPath = type === 'refA' ? pathA : pathB;
             const b = await getBranches(repoPath, shouldFilter && currentPath ? getRelativePath(currentPath) : undefined);
-            setBranches(b);
+            
+            // Filter out the current HEAD branch to avoid unproductive self-comparisons
+            // when the other side is 'working'
+            const isComparingWithWorking = (type === 'refA' && modeB === 'working') || (type === 'refB' && modeA === 'working');
+            if (isComparingWithWorking) {
+                setBranches(b.filter((branch: any) => !branch.isCurrentRepositoryHead));
+            } else {
+                setBranches(b);
+            }
         } catch (e) { console.error(e); }
     };
 
