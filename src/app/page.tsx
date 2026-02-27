@@ -244,11 +244,14 @@ export default function Home() {
 
     if (repoPath) {
         try {
-            // Resolve relative path for git
-            let relativePath = path;
-            if (path.startsWith(repoPath)) {
-                relativePath = path.substring(repoPath.length);
-                if (relativePath.startsWith('/') || relativePath.startsWith('\\')) {
+            // Resolve relative path for git with robust normalization
+            const normSelected = path.replace(/\\/g, '/').toLowerCase();
+            const normRepo = repoPath.replace(/\\/g, '/').toLowerCase();
+            
+            let relativePath = path.replace(/\\/g, '/');
+            if (normSelected.startsWith(normRepo)) {
+                relativePath = relativePath.substring(normRepo.length);
+                if (relativePath.startsWith('/')) {
                     relativePath = relativePath.substring(1);
                 }
             }
@@ -274,10 +277,13 @@ export default function Home() {
     setLoading(true);
     setModifiedContent(null);
     try {
-       let relativePath = selectedFile;
-       if (selectedFile.startsWith(repoPath)) {
-           relativePath = selectedFile.substring(repoPath.length);
-           if (relativePath.startsWith('/') || relativePath.startsWith('\\')) {
+       const normSelected = selectedFile.replace(/\\/g, '/').toLowerCase();
+       const normRepo = repoPath.replace(/\\/g, '/').toLowerCase();
+       
+       let relativePath = selectedFile.replace(/\\/g, '/');
+       if (normSelected.startsWith(normRepo)) {
+           relativePath = relativePath.substring(normRepo.length);
+           if (relativePath.startsWith('/')) {
                relativePath = relativePath.substring(1);
            }
        }
@@ -324,10 +330,14 @@ export default function Home() {
     setLoading(true);
     setModifiedContent(null);
     try {
-       let relativePath = selectedFile;
-       if (selectedFile.startsWith(repoPath)) {
-           relativePath = selectedFile.substring(repoPath.length);
-           if (relativePath.startsWith('/') || relativePath.startsWith('\\')) {
+       // Normalize paths for reliable stripping on Windows (handling casing and slashes)
+       const normSelected = selectedFile.replace(/\\/g, '/').toLowerCase();
+       const normRepo = repoPath.replace(/\\/g, '/').toLowerCase();
+       
+       let relativePath = selectedFile.replace(/\\/g, '/');
+       if (normSelected.startsWith(normRepo)) {
+           relativePath = relativePath.substring(normRepo.length);
+           if (relativePath.startsWith('/')) {
                relativePath = relativePath.substring(1);
            }
        }
@@ -343,11 +353,11 @@ export default function Home() {
            setDiffData(result);
        } else {
            // Default: Compare commit with its parent (Commit N vs Commit N-1)
-           // If we use refA = commit^ and refB = commit, we see what changed IN the commit.
+           // Use ~1 instead of ^ for Windows compatibility (carets are shell escape chars)
            console.log(`Comparing Git Commit: ${commit.id} VS its Parent`);
            const result = await compareFiles(
                repoPath,
-               relativePath, `${commit.id}^`,
+               relativePath, `${commit.id}~1`,
                relativePath, commit.id
            );
            setDiffData(result);
@@ -775,10 +785,13 @@ export default function Home() {
                                                           setSelectedSnapshot(null);
                                                           setLoading(true);
                                                           try {
-                                                              let relativePath = selectedFile;
-                                                              if (selectedFile.startsWith(repoPath)) {
-                                                                  relativePath = selectedFile.substring(repoPath.length);
-                                                                  if (relativePath.startsWith('/') || relativePath.startsWith('\\')) {
+                                                              const normSelected = selectedFile.replace(/\\/g, '/').toLowerCase();
+                                                              const normRepo = repoPath.replace(/\\/g, '/').toLowerCase();
+                                                              
+                                                              let relativePath = selectedFile.replace(/\\/g, '/');
+                                                              if (normSelected.startsWith(normRepo)) {
+                                                                  relativePath = relativePath.substring(normRepo.length);
+                                                                  if (relativePath.startsWith('/')) {
                                                                       relativePath = relativePath.substring(1);
                                                                   }
                                                               }

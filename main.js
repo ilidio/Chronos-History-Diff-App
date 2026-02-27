@@ -533,9 +533,12 @@ Summary:`;
       
       const getFileContent = async (filePath, gitRef) => {
           if (!filePath) return '';
+          // Normalize path for Git (always use forward slashes)
+          const normalizedFilePath = filePath.replace(/\\/g, '/');
           try {
               if (gitRef) {
-                  return await runGit(`git show "${gitRef}:${filePath}"`, repoPath);
+                  console.log(`[Compare] Fetching git content for ${gitRef}:${normalizedFilePath}`);
+                  return await runGit(`git show "${gitRef}:${normalizedFilePath}"`, repoPath, { trim: false });
               } else {
                   // 1. Check if path is absolute
                   if (path.isAbsolute(filePath)) {
@@ -543,7 +546,7 @@ Summary:`;
                       return '';
                   }
 
-                  // 2. Check if it's a relative history path that needs resolving
+                  // 2. Check if it's a relative history path
                   if (filePath.startsWith('.history/')) {
                       const historyDir = await findChronosHistoryDir(repoPath);
                       if (historyDir) {
@@ -563,8 +566,8 @@ Summary:`;
                   return '';
               }
           } catch (e) {
-              console.error(`[Compare] Error reading ${filePath}:`, e);
-              return '';
+              console.error(`[Compare] Error reading ${normalizedFilePath} (${gitRef || 'Working'}):`, e);
+              throw e; // Throw so the UI can report the failure
           }
       };
 
