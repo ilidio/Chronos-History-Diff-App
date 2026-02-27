@@ -647,15 +647,26 @@ export default function Home() {
                   {/* Left: History Timeline */}
                   <div className="w-80 border-r flex flex-col bg-muted/5 flex-shrink-0 h-full min-h-0">
                       <div className="p-3 border-b bg-background/50 flex flex-col gap-3 flex-shrink-0">
-                          <div className="flex items-center justify-between">
-                              <span className="text-xs font-bold uppercase tracking-wider text-muted-foreground">
-                                  {isFilteringBySelection ? 'Filtered Results' : (historyMode === 'local' ? 'Chronos Snapshots' : 'Git Commits')}
-                              </span>
-                              <span className={`text-[10px] px-1.5 py-0.5 rounded-md font-mono ${isFilteringBySelection ? 'bg-primary/20 text-primary' : 'bg-muted'}`}>
-                                  {historyMode === 'local' 
-                                    ? (isFilteringBySelection ? selectionLocalHistory.length : fileHistory.length) 
-                                    : (isFilteringBySelection ? selectionGitHistory.length : gitHistory.length)}
-                              </span>
+                          <div className="flex flex-col gap-2">
+                              <div className="flex items-center justify-between">
+                                  <span className="text-xs font-bold uppercase tracking-wider text-muted-foreground">
+                                      {isFilteringBySelection ? 'Filtered Results' : (historyMode === 'local' ? 'Chronos Snapshots' : 'Git Commits')}
+                                  </span>
+                                  <span className={`text-[10px] px-1.5 py-0.5 rounded-md font-mono ${isFilteringBySelection ? 'bg-primary/20 text-primary' : 'bg-muted'}`}>
+                                      {historyMode === 'local' 
+                                        ? (isFilteringBySelection ? selectionLocalHistory.length : fileHistory.length) 
+                                        : (isFilteringBySelection ? selectionGitHistory.length : gitHistory.length)}
+                                  </span>
+                              </div>
+                              <Button 
+                                variant="outline" 
+                                size="sm" 
+                                className="w-full h-8 text-[10px] font-bold uppercase border-primary/20 text-primary hover:bg-primary/5 gap-2"
+                                onClick={() => setCompareOpen(true)}
+                              >
+                                <ArrowRightLeft className="h-3 w-3" />
+                                Multi-Source Comparison
+                              </Button>
                           </div>
                           
                           <div className="flex bg-muted/50 p-1 rounded-lg">
