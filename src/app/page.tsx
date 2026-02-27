@@ -165,6 +165,12 @@ export default function Home() {
         })
       ]);
 
+      // Add to recent paths via IPC
+      const ipc = (window as any).electron?.ipcRenderer;
+      if (ipc) {
+        ipc.invoke('app:addToRecent', path);
+      }
+
       console.log(`Found ${files.length} files and ${historyIndex.snapshots.length} history snapshots`);
       setAllFiles(files.sort((a: FileEntry, b: FileEntry) => a.path.localeCompare(b.path)));
       setChronosHistory(historyIndex.snapshots.sort((a: Snapshot, b: Snapshot) => b.timestamp - a.timestamp));

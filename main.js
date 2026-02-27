@@ -22,8 +22,17 @@ app.setName('ChronosHistoryDiff');
 
 let mainWindow = null;
 
-function createMenu() {
+function createMenu(recentPaths = []) {
     const isMac = process.platform === 'darwin';
+    const recentSubmenu = recentPaths.length > 0 
+        ? recentPaths.map(p => ({
+            label: p,
+            click: () => {
+                mainWindow?.webContents.send('menu:open-folder', p);
+            }
+        }))
+        : [{ label: 'No Recent Folders', enabled: false }];
+
     const template = [
         ...(isMac ? [{
             label: 'ChronosHistoryDiff',
@@ -58,8 +67,13 @@ function createMenu() {
                         if (!canceled && filePaths.length > 0) {
                             console.log("Sending menu:open-folder event with path:", filePaths[0]);
                             mainWindow?.webContents.send('menu:open-folder', filePaths[0]);
+                            addToRecentPaths(filePaths[0]);
                         }
                     }
+                },
+                {
+                    label: 'Open Recent',
+                    submenu: recentSubmenu
                 },
                 { type: 'separator' },
                 isMac ? { role: 'close' } : { role: 'quit' }
@@ -188,6 +202,18 @@ async function writeAppSettings(settings) {
     }
 }
 
+async function addToRecentPaths(newPath) {
+    const settings = await readAppSettings();
+    let recentPaths = settings.recentPaths || [];
+    
+    // Remove if exists, add to front, limit to 10
+    recentPaths = [newPath, ...recentPaths.filter(p => p !== newPath)].slice(0, 10);
+    
+    settings.recentPaths = recentPaths;
+    await writeAppSettings(settings);
+    createMenu(recentPaths);
+}
+
 async function createWindow() {
   const isMac = process.platform === 'darwin';
   
@@ -203,6 +229,9 @@ async function createWindow() {
     titleBarStyle: isMac ? 'hiddenInset' : undefined,
     frame: true,
   });
+
+  const settings = await readAppSettings();
+  createMenu(settings.recentPaths || []);
 
   if (process.platform === 'darwin') {
       try {
@@ -323,8 +352,14 @@ async function findChronosHistoryDir(repoPath) {
 
 
 
-app.whenReady().then(() => {
-  createMenu();
+app.whenReady().then(async () => {
+  const settings = await readAppSettings();
+  createMenu(settings.recentPaths || []);
+
+  ipcMain.handle('app:addToRecent', async (_, path) => {
+    await addToRecentPaths(path);
+  });
+
   ipcMain.handle('app:getVersion', () => {
     return app.getVersion();
   });
