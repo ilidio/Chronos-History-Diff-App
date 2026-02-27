@@ -125,6 +125,8 @@ eval "$BUILDER_CMD" || { echo "Electron Builder packaging failed. Exiting."; exi
 # Archive the build artifacts
 ARCHIVE_DIR="dist_archive/${TARGET_OS}-${TARGET_ARCH}"
 echo "Archiving build artifacts to $ARCHIVE_DIR..."
+# Clean the specific archive directory first to avoid "Directory not empty" errors on mv
+rm -rf "$ARCHIVE_DIR"
 mkdir -p "$ARCHIVE_DIR"
 mv dist/* "$ARCHIVE_DIR/" || { echo "Failed to archive build artifacts."; exit 1; }
 rm -rf dist/ # Clean up the temporary dist folder
