@@ -57,6 +57,16 @@ This command will:
 2.  Package the Electron app using `electron-builder`.
 3.  Output the installers to the `dist/` directory.
 
+### 🍎 Troubleshooting (macOS)
+
+If you find that the packaged application is unable to load Git history or run Git commands, it is likely because you haven't agreed to the Xcode license agreement on your system.
+
+To fix this, run the following command in your terminal and type `agree` when prompted:
+
+```bash
+sudo xcodebuild -license
+```
+
 **Why build?**
 -   **Correct Branding**: The menu bar will correctly show **"ChronosHistoryDiff"**.
 -   **Performance**: The app runs optimized production code.

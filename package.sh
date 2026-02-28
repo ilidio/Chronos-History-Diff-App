@@ -68,6 +68,15 @@ display_help() {
 
 # --- Main Script Logic ---
 
+# Check for macOS Xcode license if on mac
+if [[ "$(uname -s)" == "Darwin"* ]]; then
+    if ! xcodeselect_output=$(/usr/bin/xcrun clang 2>&1) && echo "$xcodeselect_output" | grep -q "license"; then
+        echo "❌ ERROR: Xcode license not accepted."
+        echo "Please run: sudo xcodebuild -license"
+        exit 1
+    fi
+fi
+
 # Check for help flag
 if [[ "$1" == "help" || "$1" == "-h" || "$1" == "--help" ]]; then
   display_help

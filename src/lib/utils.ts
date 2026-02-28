@@ -45,3 +45,15 @@ export function sliceLines(content: string, startLine: number, endLine: number, 
     const end = Math.min(lines.length, endLine + context);
     return lines.slice(start, end).join('\n');
 }
+
+export function formatRelativeTime(date: Date | number): string {
+    const now = new Date().getTime();
+    const then = typeof date === 'number' ? date : date.getTime();
+    const diff = Math.floor((now - then) / 1000);
+
+    if (diff < 60) return 'just now';
+    if (diff < 3600) return `${Math.floor(diff / 60)}m ago`;
+    if (diff < 86400) return `${Math.floor(diff / 3600)}h ago`;
+    if (diff < 2592000) return `${Math.floor(diff / 86400)}d ago`;
+    return new Date(then).toLocaleDateString();
+}

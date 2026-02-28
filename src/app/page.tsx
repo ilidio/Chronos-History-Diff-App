@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect, useMemo } from 'react';
+import { useState, useEffect, useMemo, useRef } from 'react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { ScrollArea } from '@/components/ui/scroll-area';
@@ -11,6 +11,7 @@ import {
   openDirectoryDialog, 
   readAllFiles, 
   onMenuOpenFolder, 
+  onMenuOpenFile,
   removeMenuOpenFolderListener,
   readChronosHistoryIndex,
   compareFiles,
@@ -18,10 +19,14 @@ import {
   getFileHistory,
   getSelectionHistory,
   getSearchHistory,
+  getConflictVersions,
+  getRepoStatus,
+  addToRecentFile,
 } from '@/lib/electron';
 import { getLanguageFromPath } from '@/lib/utils';
 import ExplorerTree, { FileEntry } from '@/components/ExplorerTree';
 import ChronosHistoryList from '@/components/ChronosHistoryList';
+import InteractiveHistoryGraph from '@/components/InteractiveHistoryGraph';
 import DiffView from '@/components/DiffView'; 
 import SettingsDialog from '@/components/SettingsDialog';
 import CompareFilesDialog from '@/components/CompareFilesDialog';
@@ -30,6 +35,10 @@ import HelpDialog from '@/components/HelpDialog';
 import GrepSearchDialog from '@/components/GrepSearchDialog';
 import ChronosLogo from '@/components/ChronosLogo';
 import AboutDialog from '@/components/AboutDialog';
+import MilestoneDialog from '@/components/MilestoneDialog';
+import MergeEditor from '@/components/MergeEditor';
+import { Dialog, DialogContent } from '@/components/ui/dialog';
+import { Flag, ShieldAlert } from 'lucide-react';
 
 const BlackHoleIcon = ({ className }: { className?: string }) => (
   <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 16 16" className={className}>
@@ -66,6 +75,9 @@ interface DiffData {
 
 export default function Home() {
   const [repoPath, setRepoPath] = useState('');
+  const repoPathRef = useRef(repoPath);
+  useEffect(() => { repoPathRef.current = repoPath; }, [repoPath]);
+
   const [theme, setTheme] = useState<'light' | 'dark'>('dark');
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
@@ -90,11 +102,15 @@ export default function Home() {
   const [helpOpen, setHelpOpen] = useState(false);
   const [grepOpen, setGrepOpen] = useState(false);
   const [compareOpen, setCompareOpen] = useState(false);
+  const [milestoneOpen, setMilestoneOpen] = useState(false);
+  const [mergeOpen, setMergeOpen] = useState(false);
+  const [mergeData, setMergeData] = useState<{ base: string, ours: string, theirs: string, path: string } | null>(null);
+  const [selectedPaths, setSelectedPaths] = useState<string[]>([]);
   const [compareSelectionOpen, setCompareSelectionOpen] = useState(false);
   const [briefOpen, setBriefOpen] = useState(false);
   const [aboutOpen, setAboutOpen] = useState(false);
   const [appVersion, setAppVersion] = useState('N/A');
-  const [historyMode, setHistoryMode] = useState<'local' | 'git'>('local');
+  const [historyMode, setHistoryMode] = useState<'local' | 'git' | 'graph'>('local');
   const [pinnedVersion, setPinnedVersion] = useState<{ type: 'local' | 'git', id: string, label: string, ref: string } | null>(null);
   const [selectedRange, setSelectedRange] = useState<{ startLine: number, endLine: number, searchText?: string } | null>(null);
   const [isFilteringBySelection, setIsFilteringBySelection] = useState(false);
@@ -103,9 +119,22 @@ export default function Home() {
 
   // Initial Load & Listeners
   useEffect(() => {
-    const cleanup = onMenuOpenFolder((path: string) => {
+    const cleanupFolder = onMenuOpenFolder((path: string) => {
       console.log("Menu open folder event received:", path);
       handleOpenFolder(path);
+    });
+
+    const cleanupFile = onMenuOpenFile(({ filePath, repoPath: newRepoPath }: { filePath: string, repoPath: string }) => {
+      console.log("Menu open file event received:", filePath, "Project:", newRepoPath);
+      
+      if (newRepoPath && newRepoPath !== repoPathRef.current) {
+          // Open the project folder first, then select the file
+          handleOpenFolder(newRepoPath).then(() => {
+              onFileClick(filePath, newRepoPath);
+          });
+      } else {
+          onFileClick(filePath);
+      }
     });
 
     const ipc = (window as any).electron?.ipcRenderer;
@@ -133,7 +162,8 @@ export default function Home() {
     if (savedTheme) setTheme(savedTheme);
 
     return () => {
-      cleanup();
+      cleanupFolder();
+      cleanupFile();
       window.removeEventListener('keydown', handleKeyDown);
     };
   }, []);
@@ -148,6 +178,7 @@ export default function Home() {
     console.log("Opening folder:", path);
     setLoading(true);
     setRepoPath(path);
+    repoPathRef.current = path; // Update ref immediately
     setError('');
     setAllFiles([]);
     setChronosHistory([]);
@@ -157,13 +188,47 @@ export default function Home() {
 
     try {
       // Parallel fetch
-      const [files, historyIndex] = await Promise.all([
+      const [files, historyIndex, repoStatus] = await Promise.all([
         readAllFiles(path),
         readChronosHistoryIndex(path).catch((e) => {
             console.warn("History index not found or error:", e);
             return { snapshots: [] };
-        })
+        }),
+        getRepoStatus(path).catch(() => ({ files: [] }))
       ]);
+
+      // Map git status (conflicts) and snapshot counts to files
+      const statusMap = new Map();
+      if (repoStatus && repoStatus.files) {
+          repoStatus.files.forEach((f: any) => {
+              statusMap.set(f.path.replace(/\\/g, '/'), f.status);
+          });
+      }
+
+      // Count snapshots for heat indicator
+      const snapshotCounts = new Map<string, number>();
+      historyIndex.snapshots.forEach((s: Snapshot) => {
+          const sPath = s.filePath.replace(/\\/g, '/').toLowerCase();
+          snapshotCounts.set(sPath, (snapshotCounts.get(sPath) || 0) + 1);
+      });
+
+      const filesWithMetadata = files.map((f: FileEntry) => {
+          const normRepo = path.replace(/\\/g, '/').toLowerCase();
+          const normFile = f.path.replace(/\\/g, '/').toLowerCase();
+          
+          let relPath = f.path.replace(/\\/g, '/').substring(path.replace(/\\/g, '/').length).replace(/^\//, '');
+          const status = statusMap.get(relPath);
+          
+          // Try to match snapshots by relative path or full path
+          const countByRel = snapshotCounts.get(relPath.toLowerCase()) || 0;
+          const countByAbs = snapshotCounts.get(normFile) || 0;
+
+          return {
+              ...f,
+              status: (status === 'UU' || status === 'AA' || status === 'DD' || status === 'AU' || status === 'UA') ? 'Conflict' : status,
+              snapshotCount: Math.max(countByRel, countByAbs)
+          };
+      });
 
       // Add to recent paths via IPC
       const ipc = (window as any).electron?.ipcRenderer;
@@ -172,7 +237,7 @@ export default function Home() {
       }
 
       console.log(`Found ${files.length} files and ${historyIndex.snapshots.length} history snapshots`);
-      setAllFiles(files.sort((a: FileEntry, b: FileEntry) => a.path.localeCompare(b.path)));
+      setAllFiles(filesWithMetadata.sort((a: FileEntry, b: FileEntry) => a.path.localeCompare(b.path)));
       setChronosHistory(historyIndex.snapshots.sort((a: Snapshot, b: Snapshot) => b.timestamp - a.timestamp));
       
     } catch (err: any) {
@@ -234,8 +299,22 @@ export default function Home() {
     });
   }, [chronosHistory, selectedFile, repoPath]);
 
+  // Combined history for the Time Machine Slider
+  const combinedHistory = useMemo(() => {
+    const git = isFilteringBySelection ? selectionGitHistory : gitHistory;
+    const local = isFilteringBySelection ? selectionLocalHistory : fileHistory;
+    
+    const combined = [
+        ...git.map(c => ({ type: 'git' as const, id: c.id, timestamp: new Date(c.date).getTime(), label: c.id.substring(0, 7), data: c })),
+        ...local.map(s => ({ type: 'local' as const, id: s.id, timestamp: s.timestamp, label: s.label || 'Snapshot', data: s }))
+    ];
+    
+    // Sort chronological (oldest to newest) for the slider
+    return combined.sort((a, b) => a.timestamp - b.timestamp);
+  }, [gitHistory, fileHistory, isFilteringBySelection, selectionGitHistory, selectionLocalHistory]);
+
   // Handle File Click
-  const onFileClick = async (path: string) => {
+  const onFileClick = async (path: string, repoPathOverride?: string) => {
     setSelectedFile(path);
     setSelectedSnapshot(null);
     setSelectedCommit(null);
@@ -248,11 +327,18 @@ export default function Home() {
     setSelectedRange(null);
     setIsMaximized(true); // Auto-focus on selection
 
-    if (repoPath) {
+    const activeRepoPath = repoPathOverride || repoPathRef.current;
+
+    // Track as recent file
+    if (activeRepoPath) {
+        addToRecentFile(path, activeRepoPath);
+    }
+
+    if (activeRepoPath) {
         try {
             // Resolve relative path for git with robust normalization
             const normSelected = path.replace(/\\/g, '/').toLowerCase();
-            const normRepo = repoPath.replace(/\\/g, '/').toLowerCase();
+            const normRepo = activeRepoPath.replace(/\\/g, '/').toLowerCase();
             
             let relativePath = path.replace(/\\/g, '/');
             if (normSelected.startsWith(normRepo)) {
@@ -261,7 +347,8 @@ export default function Home() {
                     relativePath = relativePath.substring(1);
                 }
             }
-            const output = await getFileHistory(repoPath, relativePath);
+            console.log(`[onFileClick] Loading history for: ${relativePath} in repo: ${activeRepoPath}`);
+            const output = await getFileHistory(activeRepoPath, relativePath);
             const parsed = output.split('\n')
                 .filter((l: string) => l.includes('|'))
                 .map((line: string) => {
@@ -427,6 +514,35 @@ export default function Home() {
     }
   };
 
+  const handleResolveConflict = async (filePath: string) => {
+      setLoading(true);
+      try {
+          const versions = await getConflictVersions(repoPath, filePath);
+          setMergeData({ ...versions, path: filePath });
+          setMergeOpen(true);
+      } catch (e: any) {
+          setError("Failed to load conflict versions: " + e.message);
+      } finally {
+          setLoading(false);
+      }
+  };
+
+  const onSaveResolution = async (content: string) => {
+      if (!mergeData) return;
+      setLoading(true);
+      try {
+          await writeFile(mergeData.path, content);
+          setMergeOpen(false);
+          setMergeData(null);
+          // Refresh file list and status
+          handleOpenFolder(repoPath);
+      } catch (e: any) {
+          setError("Failed to save resolution: " + e.message);
+      } finally {
+          setLoading(false);
+      }
+  };
+
   const handleSelectionHistory = async (rangeOverride?: any) => {
     const targetRange = rangeOverride || selectedRange;
     if (!targetRange || !selectedFile || !repoPath) return;
@@ -509,8 +625,17 @@ export default function Home() {
                 <Button variant="ghost" size="icon" className="h-8 w-8 text-muted-foreground hover:text-foreground" onClick={() => setCompareOpen(true)} title="Compare Files">
                     <ArrowRightLeft className="h-4 w-4" />
                 </Button>
-                <Button variant="ghost" size="icon" className="h-8 w-8 text-muted-foreground hover:text-foreground" onClick={() => setSettingsOpen(true)}>
-                    <SettingsIcon className="h-4 w-4" />
+                <Button 
+                    variant="ghost" 
+                    size="icon" 
+                    className={`h-8 w-8 ${selectedPaths.length > 0 ? 'text-primary animate-pulse' : 'text-muted-foreground'}`} 
+                    onClick={() => {
+                        if (selectedPaths.length === 0) alert("Select files in the tree first using the checkboxes (Hover to see them).");
+                        else setMilestoneOpen(true);
+                    }} 
+                    title={`Create Milestone (${selectedPaths.length} selected)`}
+                >
+                    <Flag className="h-4 w-4" />
                 </Button>
                 <Button variant="ghost" size="icon" className="h-8 w-8" onClick={() => setTheme(theme === 'light' ? 'dark' : 'light')}>
                     {theme === 'light' ? <Moon className="h-4 w-4" /> : <Sun className="h-4 w-4" />}
@@ -549,12 +674,32 @@ export default function Home() {
         </div>
 
         <ScrollArea className="flex-1 h-full min-h-0 overflow-hidden">
-            <div className="p-2">
+            <div className="p-2 relative group/tree">
+                {selectedPaths.length > 0 && (
+                    <div className="absolute top-0 right-2 z-10 animate-in fade-in zoom-in duration-300">
+                        <Button 
+                            variant="secondary" 
+                            size="sm" 
+                            className="h-6 text-[8px] uppercase font-bold px-2 rounded-full shadow-lg"
+                            onClick={() => setSelectedPaths([])}
+                        >
+                            Clear {selectedPaths.length}
+                        </Button>
+                    </div>
+                )}
                 <ExplorerTree
                     files={filteredFiles}
                     selectedFile={selectedFile}
                     onFileClick={onFileClick}
+                    onResolve={handleResolveConflict}
                     rootPath={repoPath}
+                    showCheckboxes={true}
+                    selectedPaths={selectedPaths}
+                    onTogglePath={(path) => {
+                        setSelectedPaths(prev => 
+                            prev.includes(path) ? prev.filter(p => p !== path) : [...prev, path]
+                        );
+                    }}
                 />
             </div>
         </ScrollArea>
@@ -704,6 +849,14 @@ export default function Home() {
                               >
                                 Git
                               </Button>
+                              <Button 
+                                variant={historyMode === 'graph' ? 'secondary' : 'ghost'} 
+                                size="sm" 
+                                className="flex-1 h-7 text-[10px] uppercase font-bold"
+                                onClick={() => setHistoryMode('graph')}
+                              >
+                                Graph
+                              </Button>
                           </div>
 
                           {(selectedRange || isFilteringBySelection) && (
@@ -745,7 +898,7 @@ export default function Home() {
                                   onSnapshotClick={onSnapshotClick}
                                   onPinClick={handlePinSnapshot}
                               />
-                          ) : (
+                          ) : historyMode === 'git' ? (
                               <div className="space-y-1 p-2">
                                   {(isFilteringBySelection ? selectionGitHistory : gitHistory).map((commit, idx) => (
                                           <div
@@ -825,6 +978,16 @@ export default function Home() {
                                           </div>
                                       )}
                                   </div>
+                              ) : (
+                                  <InteractiveHistoryGraph 
+                                      key={`graph-${(isFilteringBySelection ? selectionGitHistory : gitHistory).length}-${(isFilteringBySelection ? selectionLocalHistory : fileHistory).length}-${selectedFile}`}
+                                      gitHistory={isFilteringBySelection ? selectionGitHistory : gitHistory}
+                                      localHistory={isFilteringBySelection ? selectionLocalHistory : fileHistory}
+                                      onCommitClick={onCommitClick}
+                                      onSnapshotClick={onSnapshotClick}
+                                      selectedId={selectedSnapshot?.id || selectedCommit?.id || null}
+                                      theme={theme}
+                                  />
                               )}
                       </ScrollArea>
                   </div>
@@ -878,6 +1041,9 @@ export default function Home() {
                                   id={selectedSnapshot?.id || selectedCommit?.id}
                                   original={diffData.original}
                                   modified={diffData.modified}
+                                  repoPath={repoPath}
+                                  filePath={selectedFile}
+                                  snapshots={chronosHistory}
                                   language={getLanguageFromPath(selectedFile)}
                                   theme={theme === 'dark' ? 'vs-dark' : 'vs-light'}
                                   onChange={(val) => setModifiedContent(val || '')}
@@ -889,6 +1055,17 @@ export default function Home() {
                                       if (range?.triggerCompare) {
                                           setCompareSelectionOpen(true);
                                       }
+                                  }}
+                                  sliderProps={{
+                                      currentIndex: combinedHistory.findIndex(h => h.id === (selectedSnapshot?.id || selectedCommit?.id)),
+                                      max: combinedHistory.length - 1,
+                                      onChange: (index) => {
+                                          const version = combinedHistory[index];
+                                          if (version.type === 'git') onCommitClick(version.data);
+                                          else onSnapshotClick(version.data);
+                                      },
+                                      label: combinedHistory.find(h => h.id === (selectedSnapshot?.id || selectedCommit?.id))?.label,
+                                      timestamp: combinedHistory.find(h => h.id === (selectedSnapshot?.id || selectedCommit?.id))?.timestamp
                                   }}
                               />
                           </div>
@@ -949,6 +1126,30 @@ export default function Home() {
         onOpenChange={setAboutOpen}
         appVersion={appVersion}
       />
+
+      <MilestoneDialog 
+        open={milestoneOpen}
+        onOpenChange={setMilestoneOpen}
+        repoPath={repoPath}
+        selectedFiles={selectedPaths}
+        onSuccess={() => setSelectedPaths([])}
+      />
+
+      <Dialog open={mergeOpen} onOpenChange={setMergeOpen}>
+        <DialogContent className="max-w-[95vw] w-[95vw] h-[90vh] p-0 overflow-hidden">
+            {mergeData && (
+                <MergeEditor 
+                    base={mergeData.base}
+                    ours={mergeData.ours}
+                    theirs={mergeData.theirs}
+                    language={getLanguageFromPath(mergeData.path)}
+                    theme={theme === 'dark' ? 'vs-dark' : 'vs-light'}
+                    onSave={onSaveResolution}
+                    onCancel={() => setMergeOpen(false)}
+                />
+            )}
+        </DialogContent>
+      </Dialog>
 
     </main>
   );

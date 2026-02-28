@@ -150,12 +150,12 @@ export default function SettingsDialog({ open, onOpenChange, repoPath }: Setting
                                     <div className="grid grid-cols-4 items-center gap-4">
                                         <Label className="text-sm font-medium">Provider</Label>
                                         <select 
-                                            className="col-span-3 flex h-10 w-full rounded-md border border-input bg-transparent px-3 py-1 text-sm shadow-sm"
+                                            className="col-span-3 flex h-10 w-full rounded-md border border-input bg-background px-3 py-1 text-sm shadow-sm focus:outline-none focus:ring-1 focus:ring-ring dark:text-foreground"
                                             value={aiProvider}
                                             onChange={(e) => setAiProvider(e.target.value)}
                                         >
-                                            <option value="gemini">Google Gemini (Recommended)</option>
-                                            <option value="openai">OpenAI (GPT)</option>
+                                            <option value="gemini" className="bg-background text-foreground">Google Gemini (Recommended)</option>
+                                            <option value="openai" className="bg-background text-foreground">OpenAI (GPT)</option>
                                         </select>
                                     </div>
                                     <div className="grid grid-cols-4 items-center gap-4">
@@ -233,13 +233,13 @@ export default function SettingsDialog({ open, onOpenChange, repoPath }: Setting
                                     <div className="grid grid-cols-4 items-center gap-4">
                                         <Label className="text-sm font-medium">Tab Size</Label>
                                         <select 
-                                            className="col-span-3 flex h-10 w-full rounded-md border border-input bg-transparent px-3 py-1 text-sm shadow-sm"
+                                            className="col-span-3 flex h-10 w-full rounded-md border border-input bg-background px-3 py-1 text-sm shadow-sm focus:outline-none focus:ring-1 focus:ring-ring dark:text-foreground"
                                             value={tabSize}
                                             onChange={(e) => setTabSize(parseInt(e.target.value))}
                                         >
-                                            <option value={2}>2 Spaces</option>
-                                            <option value={4}>4 Spaces</option>
-                                            <option value={8}>8 Spaces</option>
+                                            <option value={2} className="bg-background text-foreground">2 Spaces</option>
+                                            <option value={4} className="bg-background text-foreground">4 Spaces</option>
+                                            <option value={8} className="bg-background text-foreground">8 Spaces</option>
                                         </select>
                                     </div>
                                     <div className="grid grid-cols-4 items-center gap-4">
@@ -268,15 +268,15 @@ export default function SettingsDialog({ open, onOpenChange, repoPath }: Setting
                                 <div className="grid grid-cols-4 items-center gap-4 px-1">
                                     <Label className="text-sm font-medium">Diff Tool</Label>
                                     <select 
-                                        className="col-span-3 flex h-10 w-full rounded-md border border-input bg-transparent px-3 py-1 text-sm shadow-sm"
+                                        className="col-span-3 flex h-10 w-full rounded-md border border-input bg-background px-3 py-1 text-sm shadow-sm focus:outline-none focus:ring-1 focus:ring-ring dark:text-foreground"
                                         value={diffTool}
                                         onChange={(e) => handleSaveTool(e.target.value)}
                                     >
-                                        <option value="">System Default</option>
-                                        <option value="vscode">VS Code (code --diff)</option>
-                                        <option value="kdiff3">KDiff3</option>
-                                        <option value="meld">Meld</option>
-                                        <option value="bc3">Beyond Compare 3</option>
+                                        <option value="" className="bg-background text-foreground">System Default</option>
+                                        <option value="vscode" className="bg-background text-foreground">VS Code (code --diff)</option>
+                                        <option value="kdiff3" className="bg-background text-foreground">KDiff3</option>
+                                        <option value="meld" className="bg-background text-foreground">Meld</option>
+                                        <option value="bc3" className="bg-background text-foreground">Beyond Compare 3</option>
                                     </select>
                                 </div>
                             </TabsContent>

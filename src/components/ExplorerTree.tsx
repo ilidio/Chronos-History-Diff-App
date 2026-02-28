@@ -2,19 +2,44 @@
 
 import { useState, useMemo, useEffect } from 'react';
 import { ChevronRight, ChevronDown, File, Folder, FolderOpen } from 'lucide-react';
+import { Checkbox } from './ui/checkbox';
 
 export interface FileEntry {
   name: string;
   isDirectory: boolean;
   isFile: boolean;
   path: string; // Full absolute path
+  status?: string;
+  snapshotCount?: number;
 }
+
+const HeatIndicator = ({ count }: { count: number }) => {
+    if (count === 0) return null;
+    let color = 'bg-slate-400/20';
+    let title = `${count} snapshots`;
+    
+    if (count > 20) color = 'bg-red-500 shadow-[0_0_5px_rgba(239,68,68,0.5)]';
+    else if (count > 10) color = 'bg-orange-500';
+    else if (count > 5) color = 'bg-blue-500';
+    else color = 'bg-slate-400';
+
+    return (
+        <div 
+            className={`w-1.5 h-1.5 rounded-full mr-2 flex-shrink-0 ${color}`} 
+            title={title}
+        />
+    );
+};
 
 interface ExplorerTreeProps {
   files: FileEntry[];
   selectedFile: string | null;
   onFileClick: (path: string) => void;
   rootPath: string; // To calculate relative paths
+  showCheckboxes?: boolean;
+  selectedPaths?: string[];
+  onTogglePath?: (path: string) => void;
+  onResolve?: (path: string) => void;
 }
 
 interface TreeNode {
@@ -76,7 +101,16 @@ const buildTree = (files: FileEntry[], rootPath: string): TreeNode => {
   return root;
 };
 
-export default function ExplorerTree({ files, selectedFile, onFileClick, rootPath }: ExplorerTreeProps) {
+export default function ExplorerTree({ 
+  files, 
+  selectedFile, 
+  onFileClick, 
+  rootPath,
+  showCheckboxes,
+  selectedPaths,
+  onTogglePath,
+  onResolve
+}: ExplorerTreeProps) {
   const tree = useMemo(() => buildTree(files, rootPath), [files, rootPath]);
   const [expandCollapseToken, setExpandCollapseToken] = useState<string | null>(null);
 
@@ -96,6 +130,10 @@ export default function ExplorerTree({ files, selectedFile, onFileClick, rootPat
         onFileClick={onFileClick}
         isRoot={true}
         expandCollapseToken={expandCollapseToken}
+        showCheckboxes={showCheckboxes}
+        selectedPaths={selectedPaths}
+        onTogglePath={onTogglePath}
+        onResolve={onResolve}
       />
     </div>
   );
@@ -108,9 +146,24 @@ interface TreeItemProps {
     onFileClick: (path: string) => void;
     isRoot?: boolean;
     expandCollapseToken: string | null;
+    showCheckboxes?: boolean;
+    selectedPaths?: string[];
+    onTogglePath?: (path: string) => void;
+    onResolve?: (path: string) => void;
 }
 
-function TreeItem({ node, level, selectedFile, onFileClick, isRoot = false, expandCollapseToken }: TreeItemProps) {
+function TreeItem({ 
+    node, 
+    level, 
+    selectedFile, 
+    onFileClick, 
+    isRoot = false, 
+    expandCollapseToken,
+    showCheckboxes,
+    selectedPaths = [],
+    onTogglePath,
+    onResolve
+}: TreeItemProps) {
   const [isOpen, setIsOpen] = useState(isRoot || level < 1); 
 
   useEffect(() => {
@@ -153,6 +206,10 @@ function TreeItem({ node, level, selectedFile, onFileClick, isRoot = false, expa
                 selectedFile={selectedFile}
                 onFileClick={onFileClick}
                 expandCollapseToken={expandCollapseToken}
+                showCheckboxes={showCheckboxes}
+                selectedPaths={selectedPaths}
+                onTogglePath={onTogglePath}
+                onResolve={onResolve}
               />
           ))}
 
@@ -162,11 +219,32 @@ function TreeItem({ node, level, selectedFile, onFileClick, isRoot = false, expa
             <div
               key={file.path}
               className={`flex items-center py-1 group cursor-pointer rounded-sm px-1 ${selectedFile === file.path ? 'bg-primary/10 text-primary font-medium' : 'hover:bg-muted text-muted-foreground hover:text-foreground'}`}
-              style={{ paddingLeft: `${(isRoot ? level : level + 1) * 12 + 20}px` }}
+              style={{ paddingLeft: `${(isRoot ? level : level + 1) * 12 + (showCheckboxes ? 8 : 20)}px` }}
               onClick={() => onFileClick(file.path)}
             >
+              {showCheckboxes && (
+                  <Checkbox 
+                    checked={selectedPaths.includes(file.path)}
+                    onCheckedChange={() => onTogglePath?.(file.path)}
+                    className="mr-2 h-3.5 w-3.5"
+                    onClick={(e) => e.stopPropagation()}
+                  />
+              )}
+              <HeatIndicator count={file.snapshotCount || 0} />
               <File className="h-3 w-3 mr-2 flex-shrink-0 opacity-70" />
-              <span className="truncate">{file.name}</span>
+              <span className="truncate flex-1">{file.name}</span>
+              
+              {file.status === 'Conflict' && (
+                  <button
+                    onClick={(e) => {
+                        e.stopPropagation();
+                        onResolve?.(file.path);
+                    }}
+                    className="ml-2 px-1.5 py-0.5 bg-orange-500 text-white text-[9px] font-bold rounded hover:bg-orange-600 transition-colors uppercase"
+                  >
+                      Resolve
+                  </button>
+              )}
             </div>
           ))}
         </div>

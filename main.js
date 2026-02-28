@@ -5,6 +5,14 @@ const fs = require('fs');
 const glob = require('glob');
 const minimatch = require('minimatch');
 
+// Fix for PATH in packaged apps on macOS/Linux
+if (process.platform !== 'win32') {
+    const commonPaths = ['/usr/local/bin', '/usr/bin', '/bin', '/usr/sbin', '/sbin', '/opt/homebrew/bin'];
+    const currentPath = process.env.PATH || '';
+    const newPath = Array.from(new Set([...currentPath.split(':'), ...commonPaths])).join(':');
+    process.env.PATH = newPath;
+}
+
 app.commandLine.appendSwitch('ignore-certificate-errors');
 
 let loadURL;
@@ -22,9 +30,10 @@ app.setName('ChronosHistoryDiff');
 
 let mainWindow = null;
 
-function createMenu(recentPaths = []) {
+function createMenu(recentPaths = [], recentFiles = []) {
     const isMac = process.platform === 'darwin';
-    const recentSubmenu = recentPaths.length > 0 
+    
+    const recentPathsSubmenu = recentPaths.length > 0 
         ? recentPaths.map(p => ({
             label: p,
             click: () => {
@@ -32,6 +41,21 @@ function createMenu(recentPaths = []) {
             }
         }))
         : [{ label: 'No Recent Folders', enabled: false }];
+
+    const recentFilesSubmenu = recentFiles.length > 0
+        ? recentFiles.map(f => {
+            const filePath = typeof f === 'string' ? f : f.filePath;
+            const repoPath = typeof f === 'string' ? '' : f.repoPath;
+            return {
+                label: path.basename(filePath),
+                sublabel: filePath,
+                toolTip: `${filePath}\nProject: ${repoPath || 'None'}`,
+                click: () => {
+                    mainWindow?.webContents.send('menu:open-file', { filePath, repoPath });
+                }
+            };
+        })
+        : [{ label: 'No Recent Files', enabled: false }];
 
     const template = [
         ...(isMac ? [{
@@ -72,8 +96,12 @@ function createMenu(recentPaths = []) {
                     }
                 },
                 {
-                    label: 'Open Recent',
-                    submenu: recentSubmenu
+                    label: 'Open Recent Folder',
+                    submenu: recentPathsSubmenu
+                },
+                {
+                    label: 'Open Recent File',
+                    submenu: recentFilesSubmenu
                 },
                 { type: 'separator' },
                 isMac ? { role: 'close' } : { role: 'quit' }
@@ -140,11 +168,19 @@ function createMenu(recentPaths = []) {
                         mainWindow?.webContents.send('menu:open-help');
                     }
                 },
+                ...(!isMac ? [
+                    {
+                        label: 'About ChronosHistoryDiff',
+                        click: () => {
+                            mainWindow?.webContents.send('menu:open-about');
+                        }
+                    }
+                ] : []),
                 { type: 'separator' },
                 {
                     label: 'Learn More',
                     click: async () => {
-                        await shell.openExternal('https://github.com/IldioMartins/Chronos-History-Diff-App');
+                        await shell.openExternal('https://github.com/ilidio/Chronos-History-Diff-App');
                     }
                 }
             ]
@@ -157,6 +193,7 @@ function createMenu(recentPaths = []) {
 
 function runGit(command, repoPath, options = { trim: true }) {
   const normalizedPath = path.normalize(repoPath);
+  console.log(`[runGit] Executing: ${command} in ${normalizedPath}`);
   
   return new Promise((resolve, reject) => {
       exec(command, { 
@@ -164,6 +201,8 @@ function runGit(command, repoPath, options = { trim: true }) {
           maxBuffer: 1024 * 1024 * 10 
       }, (error, stdout, stderr) => {
           if (error) {
+              console.error(`[runGit] Error: ${error.message}`);
+              if (stderr) console.error(`[runGit] Stderr: ${stderr}`);
               const errorMessage = stderr ? stderr.trim() : error.message;
               reject(new Error(errorMessage));
           } else {
@@ -205,13 +244,29 @@ async function writeAppSettings(settings) {
 async function addToRecentPaths(newPath) {
     const settings = await readAppSettings();
     let recentPaths = settings.recentPaths || [];
+    let recentFiles = settings.recentFiles || [];
     
     // Remove if exists, add to front, limit to 10
     recentPaths = [newPath, ...recentPaths.filter(p => p !== newPath)].slice(0, 10);
     
     settings.recentPaths = recentPaths;
     await writeAppSettings(settings);
-    createMenu(recentPaths);
+    createMenu(recentPaths, recentFiles);
+}
+
+async function addToRecentFiles(newFilePath, repoPath) {
+    const settings = await readAppSettings();
+    let recentPaths = settings.recentPaths || [];
+    let recentFiles = settings.recentFiles || [];
+    
+    const entry = { filePath: newFilePath, repoPath: repoPath };
+    
+    // Remove if exists (by filePath), add to front, limit to 10
+    recentFiles = [entry, ...recentFiles.filter(f => (typeof f === 'string' ? f : f.filePath) !== newFilePath)].slice(0, 10);
+    
+    settings.recentFiles = recentFiles;
+    await writeAppSettings(settings);
+    createMenu(recentPaths, recentFiles);
 }
 
 async function createWindow() {
@@ -231,7 +286,7 @@ async function createWindow() {
   });
 
   const settings = await readAppSettings();
-  createMenu(settings.recentPaths || []);
+  createMenu(settings.recentPaths || [], settings.recentFiles || []);
 
   if (process.platform === 'darwin') {
       try {
@@ -360,6 +415,10 @@ app.whenReady().then(async () => {
     await addToRecentPaths(path);
   });
 
+  ipcMain.handle('app:addToRecentFile', async (_, { filePath, repoPath }) => {
+    await addToRecentFiles(filePath, repoPath);
+  });
+
   ipcMain.handle('app:getVersion', () => {
     return app.getVersion();
   });
@@ -371,6 +430,57 @@ app.whenReady().then(async () => {
               else reject(new Error(`Git clone failed with code ${code}`));
           });
       });
+  });
+
+  ipcMain.handle('git:externalDiff', async (_, { original, modified, tool }) => {
+      const tmpDir = app.getPath('temp');
+      const fileA = path.join(tmpDir, `chronos_ext_a_${Date.now()}.txt`);
+      const fileB = path.join(tmpDir, `chronos_ext_b_${Date.now()}.txt`);
+
+      try {
+          fs.writeFileSync(fileA, original);
+          fs.writeFileSync(fileB, modified);
+
+          let command = '';
+          // Simple mapping for common tools
+          switch (tool) {
+              case 'vscode':
+                  command = `code --diff "${fileA}" "${fileB}"`;
+                  break;
+              case 'kdiff3':
+                  command = `kdiff3 "${fileA}" "${fileB}"`;
+                  break;
+              case 'meld':
+                  command = `meld "${fileA}" "${fileB}"`;
+                  break;
+              case 'bc3':
+              case 'bc4':
+                  command = `bcomp "${fileA}" "${fileB}"`;
+                  break;
+              default:
+                  // Fallback to system default or just open the files?
+                  // Better: if no tool, try 'git difftool' if possible, or just fail.
+                  if (process.platform === 'darwin') command = `open -a "Beyond Compare" "${fileA}" "${fileB}"`;
+                  else if (process.platform === 'win32') command = `start "" "Beyond Compare" "${fileA}" "${fileB}"`;
+                  break;
+          }
+
+          if (command) {
+              exec(command, (err) => {
+                  if (err) console.error("External diff tool error:", err);
+              });
+          }
+          return { success: true };
+      } catch (e) {
+          console.error("Failed to prepare external diff:", e);
+          throw e;
+      }
+      // Note: we don't unlink files immediately because the tool needs them
+  });
+
+  ipcMain.handle('git:blame', async (_, { repoPath, filePath }) => {
+      const command = `git blame --porcelain -- "${filePath}"`;
+      return await runGit(command, repoPath, { trim: false });
   });
 
   ipcMain.handle('git:fileHistory', async (_, { repoPath, filePath }) => {
@@ -458,6 +568,206 @@ app.whenReady().then(async () => {
           }
       }
       return commits;
+  });
+
+  ipcMain.handle('chronos:createMilestone', async (_, { repoPath, name, description, files }) => {
+      try {
+          const historyDir = await findChronosHistoryDir(repoPath);
+          if (!historyDir) throw new Error("Chronos history folder not found");
+          
+          const milestonesFile = path.join(historyDir, 'milestones.json');
+          const milestoneId = `milestone_${Date.now()}`;
+          const milestoneDir = path.join(historyDir, 'milestones', milestoneId);
+          
+          if (!fs.existsSync(path.join(historyDir, 'milestones'))) {
+              fs.mkdirSync(path.join(historyDir, 'milestones'));
+          }
+          fs.mkdirSync(milestoneDir);
+
+          const savedFiles = [];
+          for (const file of files) {
+              const relPath = path.isAbsolute(file) ? path.relative(repoPath, file) : file;
+              const fullPath = path.isAbsolute(file) ? file : path.join(repoPath, file);
+              
+              if (fs.existsSync(fullPath)) {
+                  // Create subdirs in milestoneDir if needed
+                  const destPath = path.join(milestoneDir, relPath);
+                  const destDir = path.dirname(destPath);
+                  if (!fs.existsSync(destDir)) fs.mkdirSync(destDir, { recursive: true });
+                  
+                  fs.copyFileSync(fullPath, destPath);
+                  savedFiles.push({ originalPath: relPath, milestonePath: relPath });
+              }
+          }
+
+          const milestone = {
+              id: milestoneId,
+              name,
+              description,
+              timestamp: Date.now(),
+              files: savedFiles
+          };
+
+          let milestones = [];
+          if (fs.existsSync(milestonesFile)) {
+              milestones = JSON.parse(fs.readFileSync(milestonesFile, 'utf8'));
+          }
+          milestones.push(milestone);
+          fs.writeFileSync(milestonesFile, JSON.stringify(milestones, null, 2));
+
+          return milestone;
+      } catch (e) {
+          console.error("Failed to create milestone:", e);
+          throw e;
+      }
+  });
+
+  ipcMain.handle('chronos:getMilestones', async (_, repoPath) => {
+      try {
+          const historyDir = await findChronosHistoryDir(repoPath);
+          if (!historyDir) return [];
+          const milestonesFile = path.join(historyDir, 'milestones.json');
+          if (!fs.existsSync(milestonesFile)) return [];
+          return JSON.parse(fs.readFileSync(milestonesFile, 'utf8'));
+      } catch (e) {
+          console.error("Failed to get milestones:", e);
+          return [];
+      }
+  });
+
+  ipcMain.handle('git:getConflictVersions', async (_, { repoPath, filePath }) => {
+      try {
+          const normalizedPath = filePath.replace(/\\/g, '/');
+          
+          // Stage 1: Base, Stage 2: Ours, Stage 3: Theirs
+          const [base, ours, theirs] = await Promise.all([
+              runGit(`git show :1:"${normalizedPath}"`, repoPath, { trim: false }).catch(() => ''),
+              runGit(`git show :2:"${normalizedPath}"`, repoPath, { trim: false }).catch(() => ''),
+              runGit(`git show :3:"${normalizedPath}"`, repoPath, { trim: false }).catch(() => '')
+          ]);
+
+          return { base, ours, theirs };
+      } catch (e) {
+          console.error("Failed to get conflict versions:", e);
+          throw e;
+      }
+  });
+
+  ipcMain.handle('ai:semanticSearch', async (_, { query, history, apiKey, model, context, language }) => {
+      try {
+          const prompt = `You are an expert repository search assistant. 
+Find the most relevant entries from the provided history list that match the user's intent query.
+User Query: "${query}"
+${context ? `Additional Context: ${context}` : ''}
+Response language: ${language || 'English'}.
+
+History List:
+${history.map((h, i) => `${i}. ID: ${h.id} | Message: ${h.message} | Author: ${h.author} | Date: ${h.date || h.timestamp}`).join('\n')}
+
+Instructions:
+1. Identify up to 10 most relevant entries.
+2. Return ONLY a JSON array of the IDs (hashes) of these entries, in order of relevance.
+3. If none are relevant, return an empty array [].
+Example: ["hash1", "hash2"]
+
+Output (JSON ONLY):`;
+
+          const response = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/${model || 'gemini-1.5-flash'}:generateContent?key=${apiKey}`, {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({
+                  contents: [{ parts: [{ text: prompt }] }]
+              })
+          });
+
+          const data = await response.json();
+          if (data.error) throw new Error(data.error.message);
+          
+          const text = data.candidates[0].content.parts[0].text;
+          const jsonMatch = text.match(/\[.*\]/s);
+          if (jsonMatch) {
+              return JSON.parse(jsonMatch[0]);
+          }
+          return [];
+      } catch (e) {
+          console.error("Gemini AI Semantic Search Error:", e);
+          throw e;
+      }
+  });
+
+  ipcMain.handle('ai:resolveConflict', async (_, { base, ours, theirs, apiKey, model, language }) => {
+      try {
+          const prompt = `You are an expert senior software engineer. 
+Your task is to resolve a 3-way merge conflict.
+Base: (The common ancestor)
+Ours: (Current local changes)
+Theirs: (Incoming remote changes)
+
+Please analyze the changes from both sides and provide a single, unified, merged version of the file that correctly preserves the logic from both "Ours" and "Theirs" where possible, or picks the most sensible version if they conflict directly.
+Do NOT include any conflict markers like <<<<<<<, =======, or >>>>>>> in your final output.
+Return ONLY the merged file content, no explanations or markdown blocks.
+
+Language: ${language || 'English'}
+
+BASE CONTENT:
+${base.substring(0, 5000)}
+
+OURS CONTENT:
+${ours.substring(0, 5000)}
+
+THEIRS CONTENT:
+${theirs.substring(0, 5000)}
+
+MERGED CONTENT:`;
+
+          const response = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/${model || 'gemini-1.5-flash'}:generateContent?key=${apiKey}`, {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({
+                  contents: [{ parts: [{ text: prompt }] }]
+              })
+          });
+
+          const data = await response.json();
+          if (data.error) throw new Error(data.error.message);
+          return data.candidates[0].content.parts[0].text;
+      } catch (e) {
+          console.error("Gemini AI Conflict Resolution Error:", e);
+          throw e;
+      }
+  });
+
+  ipcMain.handle('ai:summarizeDiff', async (_, { original, modified, apiKey, model, context, language }) => {
+      try {
+          const prompt = `You are an expert senior software engineer. 
+Analyze the following code changes (original vs modified) and provide a concise, technical summary of what was changed and why it might have been changed.
+Focus on logic changes, bug fixes, and refactoring. Ignore minor formatting if possible.
+${context ? `Additional Context: ${context}` : ''}
+Response language: ${language || 'English'}.
+
+Original Code:
+${original.substring(0, 5000)}
+
+Modified Code:
+${modified.substring(0, 5000)}
+
+Summary:`;
+
+          const response = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/${model || 'gemini-1.5-flash'}:generateContent?key=${apiKey}`, {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({
+                  contents: [{ parts: [{ text: prompt }] }]
+              })
+          });
+
+          const data = await response.json();
+          if (data.error) throw new Error(data.error.message);
+          return data.candidates[0].content.parts[0].text;
+      } catch (e) {
+          console.error("Gemini AI Diff Error:", e);
+          throw e;
+      }
   });
 
   ipcMain.handle('git:dailyBrief', async (_, { commits, apiKey, model, language }) => {
@@ -573,7 +883,8 @@ Summary:`;
           try {
               if (gitRef) {
                   console.log(`[Compare] Fetching git content for ${gitRef}:${normalizedFilePath}`);
-                  return await runGit(`git show "${gitRef}:${normalizedFilePath}"`, repoPath, { trim: false });
+                  // If git show fails (e.g. file didn't exist in that ref), return empty string instead of crashing
+                  return await runGit(`git show "${gitRef}:${normalizedFilePath}"`, repoPath, { trim: false }).catch(() => '');
               } else {
                   // 1. Check if path is absolute
                   if (path.isAbsolute(filePath)) {
@@ -654,6 +965,18 @@ Summary:`;
           filters: [{ name: 'Chronos Diff Files', extensions: ['cdiff'] }]
       });
       return { canceled, filePath };
+  });
+
+  ipcMain.handle('fs:readFile', async (_, filePath) => {
+    try {
+      if (fs.existsSync(filePath)) {
+        return await fs.promises.readFile(filePath, 'utf8');
+      }
+      return null;
+    } catch (e) {
+      console.error(`Failed to read file ${filePath}:`, e);
+      throw e;
+    }
   });
 
   ipcMain.handle('fs:readChronosSnapshotContent', async (_, { repoPath, storagePath }) => {

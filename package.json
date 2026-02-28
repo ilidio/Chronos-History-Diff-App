@@ -3,7 +3,7 @@
   "productName": "ChronosHistoryDiff",
   "version": "0.1.0",
   "description": "A diff application compatible with Chronos History VS Code extension, built with a GitForge-like feel.",
-  "author": "Ilidio Martins <ilidio.martins@gmail.com>",
+  "author": "Ilídio Martins <ilidio.martins@gmail.com>",
   "homepage": "",
   "private": true,
   "main": "main.js",
@@ -59,7 +59,7 @@
       ],
       "icon": "public/logo.png",
       "category": "Development",
-      "maintainer": "Ilidio Martins <ilidio.martins@gmail.com>"
+      "maintainer": "Ilídio Martins <ilidio.martins@gmail.com>"
     }
   },
   "dependencies": {
