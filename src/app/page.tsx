@@ -38,7 +38,8 @@ import AboutDialog from '@/components/AboutDialog';
 import MilestoneDialog from '@/components/MilestoneDialog';
 import MergeEditor from '@/components/MergeEditor';
 import { Dialog, DialogContent } from '@/components/ui/dialog';
-import { Flag, ShieldAlert } from 'lucide-react';
+import { Popover, PopoverTrigger, PopoverContent } from '@/components/ui/popover';
+import { Flag, ShieldAlert, Info, HelpCircle } from 'lucide-react';
 
 const BlackHoleIcon = ({ className }: { className?: string }) => (
   <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 16 16" className={className}>
@@ -609,11 +610,10 @@ export default function Home() {
       {/* Sidebar: File Explorer */}
       <div className="w-72 border-r flex flex-col h-full bg-muted/5 flex-shrink-0">
         <div className="h-14 border-b flex items-center justify-between px-4 flex-shrink-0">
-            <div className="flex items-center gap-2 font-bold tracking-tight">
+            <div className="flex items-center gap-2">
                 <div className="p-1 bg-primary/10 rounded text-primary">
                     <ChronosLogo width={20} height={20} className="h-5 w-5" />
                 </div>
-                <span>Chronos</span>
             </div>
             <div className="flex items-center gap-1">
                 <Button variant="ghost" size="icon" className="h-8 w-8 text-muted-foreground hover:text-primary" onClick={() => setGrepOpen(true)} title="Deep History Search (Grep)">
@@ -640,6 +640,27 @@ export default function Home() {
                 <Button variant="ghost" size="icon" className="h-8 w-8" onClick={() => setTheme(theme === 'light' ? 'dark' : 'light')}>
                     {theme === 'light' ? <Moon className="h-4 w-4" /> : <Sun className="h-4 w-4" />}
                 </Button>
+
+                <Popover>
+                    <PopoverTrigger asChild>
+                        <Button variant="ghost" size="icon" className="h-8 w-8 text-muted-foreground hover:text-foreground">
+                            <SettingsIcon className="h-4 w-4" />
+                        </Button>
+                    </PopoverTrigger>
+                    <PopoverContent className="w-48 p-1" align="end">
+                        <div className="flex flex-col gap-1">
+                            <Button variant="ghost" className="justify-start h-9 px-3 text-sm font-normal" onClick={() => setSettingsOpen(true)}>
+                                <SettingsIcon className="h-4 w-4 mr-2" /> Settings
+                            </Button>
+                            <Button variant="ghost" className="justify-start h-9 px-3 text-sm font-normal" onClick={() => setHelpOpen(true)}>
+                                <HelpCircle className="h-4 w-4 mr-2" /> Help
+                            </Button>
+                            <Button variant="ghost" className="justify-start h-9 px-3 text-sm font-normal" onClick={() => setAboutOpen(true)}>
+                                <Info className="h-4 w-4 mr-2" /> About
+                            </Button>
+                        </div>
+                    </PopoverContent>
+                </Popover>
             </div>
         </div>
 

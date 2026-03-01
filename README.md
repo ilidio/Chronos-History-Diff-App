@@ -15,19 +15,24 @@ ChronosHistoryDiff is built for flexibility. It can function perfectly as a **st
 
 *   **📝 Interactive Diff Viewer**:
     *   **Side-by-Side** Diff Views with syntax highlighting, powered by Monaco Editor.
-    *   Compare current working files against Chronos local history snapshots or Git commits.
-    *   Option to pin a version for continuous comparison against other history entries.
+    *   **"Blame" with a Twist**: A dedicated sidebar showing both Git authors and the local Chronos snapshot that last touched each line.
+    *   **Line-Level "Time Travel" Restore**: Right-click any line in the history view to instantly restore it to your working copy.
+    *   **AI Merge Conflict Resolver**: Gemini-powered 3-way merge resolution to intelligently fix complex code conflicts.
     *   **Editable Diff**: Make changes directly within the diff view and save them back to the working file.
     *   **Selection-based History**: Filter history to show changes relevant to a selected line range or search term.
-*   **📂 File Explorer & History Navigation**:
-    *   Browse your project files and view their Chronos local history and Git commit history.
-    *   Filter files by search term.
-    *   Pin specific local snapshots or Git commits for easy comparison.
-*   **🔍 Deep History Search (Grep)**: Powerful search functionality to find content across your project's history.
-*   **💡 Daily Progress Briefing**: Generate an AI-powered summary of your daily work based on Git commits.
-*   **⚙️ Customizable Settings**: Adjust application settings to suit your workflow.
-*   **↔️ Compare Any Files**: A dedicated dialog to compare any two files in your project.
-*   **🌓 Theming**: Toggle between light and dark modes for comfortable viewing.
+*   **📂 File Explorer & Smart Navigation**:
+    *   **Visual History Heatmap**: Color-coded "heat" indicators in the explorer showing which files are changing most frequently.
+    *   **Open Recent Files**: Persistent access to your 10 most recently opened files with automatic project switching.
+    *   **Deep History Search (Grep)**: Powerful search functionality to find content across your project's entire history.
+    *   **Semantic Search**: AI-powered search that understands your *intent* when looking for specific historical changes.
+*   **📊 Collaboration & Reporting**:
+    *   **Shareable Diff Reports**: Export any comparison as a standalone, interactive HTML file with syntax highlighting and line filtering.
+    *   **External Tool Integration**: Launch your favorite specialized diff tools (Beyond Compare, VS Code, Meld, etc.) directly from Chronos.
+    *   **Daily Progress Briefing**: Generate an AI-powered summary of your daily work based on Git commits.
+*   **⚙️ Advanced Control**:
+    *   **Milestone Creation**: Group related file snapshots into named milestones for easy reference.
+    *   **Customizable Settings**: Adjust font size, whitespace handling, and AI providers.
+    *   **🌓 Theming**: Toggle between light and dark modes for comfortable viewing.
 
 ## 🛠️ Development
 
@@ -40,8 +45,6 @@ npm install
 # Run development server (Next.js + Electron)
 npm run dev
 ```
-
-**Note:** In development mode (`npm run dev`), the application menu bar on macOS will display **"Electron"** instead of "ChronosHistoryDiff". This is a standard behavior of the Electron runner. To see the correct branding, you must build the application for production.
 
 ## 📦 Production Build
 
@@ -77,7 +80,8 @@ sudo xcodebuild -license
 *   **Framework**: [Electron](https://www.electronjs.org/) + [Next.js](https://nextjs.org/)
 *   **UI Library**: [React](https://react.dev/) + [Shadcn/UI](https://ui.shadcn.com/)
 *   **Styling**: [Tailwind CSS](https://tailwindcss.com/)
-*   **Editor**: [Monaco Editor](https://microsoft.github.io/monaco-editor/) (Diff View)
+*   **Editor**: [Monaco Editor](https://microsoft.github.io/monaco-editor/)
+*   **AI Engine**: [Google Gemini API](https://ai.google.dev/)
 
 ## 📄 License
 
@@ -86,4 +90,3 @@ Private / Proprietary
 ## 🖼 Screenshots
 
 <img src="public/Screenshot1.png"/>
-
