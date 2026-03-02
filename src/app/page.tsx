@@ -366,15 +366,22 @@ export default function Home() {
   const onSnapshotClick = async (snapshot: Snapshot) => {
     setSelectedSnapshot(snapshot);
     setSelectedCommit(null);
-    if (!repoPath || !selectedFile) return;
+    
+    // Ensure we switch to the file if it's different
+    if (snapshot.filePath && snapshot.filePath !== selectedFile) {
+        setSelectedFile(snapshot.filePath);
+    }
+    
+    const targetFile = snapshot.filePath || selectedFile;
+    if (!repoPath || !targetFile) return;
 
     setLoading(true);
     setModifiedContent(null);
     try {
-       const normSelected = selectedFile.replace(/\\/g, '/').toLowerCase();
+       const normSelected = targetFile.replace(/\\/g, '/').toLowerCase();
        const normRepo = repoPath.replace(/\\/g, '/').toLowerCase();
        
-       let relativePath = selectedFile.replace(/\\/g, '/');
+       let relativePath = targetFile.replace(/\\/g, '/');
        if (normSelected.startsWith(normRepo)) {
            relativePath = relativePath.substring(normRepo.length);
            if (relativePath.startsWith('/')) {
@@ -1132,16 +1139,19 @@ export default function Home() {
         open={grepOpen}
         onOpenChange={setGrepOpen}
         repoPath={repoPath}
-        onCommitSelect={async (commit) => {
-          // When a commit is selected from global search, 
-          // we need to show it in the history browser.
-          // For simplicity, we keep the current file selected (if any)
-          // and switch to git mode to show this commit.
-          setHistoryMode('git');
-          onCommitClick(commit);
+        onCommitSelect={async (item) => {
+          if (item.type === 'snapshot') {
+            setHistoryMode('local');
+            onSnapshotClick(item);
+          } else {
+            setHistoryMode('git');
+            onCommitClick(item);
+          }
+        }}
+        onFileSelect={(filePath) => {
+          onFileClick(filePath);
         }}
       />
-
       <AboutDialog
         open={aboutOpen}
         onOpenChange={setAboutOpen}

@@ -23,7 +23,8 @@ ChronosHistoryDiff is built for flexibility. It can function perfectly as a **st
 *   **📂 File Explorer & Smart Navigation**:
     *   **Visual History Heatmap**: Color-coded "heat" indicators in the explorer showing which files are changing most frequently.
     *   **Open Recent Files**: Persistent access to your 10 most recently opened files with automatic project switching.
-    *   **Deep History Search (Grep)**: Powerful search functionality to find content across your project's entire history.
+    *   **Deep History Search (Grep)**: Powerful search functionality to find content across your project's entire history using Git primitives.
+    *   **Inner Indexed Search**: Near-instant keyword search across both your working directory and local Chronos history snapshots, powered by a high-performance memory-mapped index.
     *   **Semantic Search**: AI-powered search that understands your *intent* when looking for specific historical changes.
 *   **📊 Collaboration & Reporting**:
     *   **Shareable Diff Reports**: Export any comparison as a standalone, interactive HTML file with syntax highlighting and line filtering.

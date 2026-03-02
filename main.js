@@ -817,6 +817,113 @@ Summary:`;
       return await runGit(command, repoPath);
   });
 
+  // --- SEARCH INDEXING LOGIC ---
+  let searchIndex = null; 
+
+  ipcMain.handle('search:rebuildIndex', async (_, repoPath) => {
+      console.log(`[Indexer] Rebuilding index for: ${repoPath}`);
+      const index = {
+          files: {}, // path -> content
+          snapshots: {}, // id -> content
+          terms: {} // term -> { files: [], snapshots: [] }
+      };
+
+      try {
+          // 1. Index Current Files
+          const files = await glob.glob('**/*', { 
+              cwd: repoPath, 
+              nodir: true,
+              ignore: ['**/.git/**', '**/.history/**', '**/node_modules/**', '**/dist/**', '**/.next/**']
+          });
+
+          for (const file of files) {
+              try {
+                  const content = fs.readFileSync(path.join(repoPath, file), 'utf8');
+                  if (content.length > 100000) continue; // Skip huge files
+                  
+                  index.files[file] = content;
+                  const words = new Set(content.toLowerCase().match(/\b\w{3,}\b/g) || []);
+                  words.forEach(word => {
+                      if (!index.terms[word]) index.terms[word] = { f: [], s: [] };
+                      index.terms[word].f.push(file);
+                  });
+              } catch (e) {}
+          }
+
+          // 2. Index Chronos History
+          const historyDir = await findChronosHistoryDir(repoPath);
+          if (historyDir) {
+              const indexPath = path.join(historyDir, 'index.json');
+              if (fs.existsSync(indexPath)) {
+                  const snapshots = JSON.parse(fs.readFileSync(indexPath, 'utf8')).snapshots || [];
+                  for (const snap of snapshots) {
+                      try {
+                          const snapPath = path.join(historyDir, snap.storagePath || snap.id);
+                          if (fs.existsSync(snapPath)) {
+                              const content = fs.readFileSync(snapPath, 'utf8');
+                              index.snapshots[snap.id] = { 
+                                  ...snap, // Full original snapshot object
+                                  message: snap.label || snap.eventType,
+                                  author: 'Local User',
+                                  date: new Date(snap.timestamp).toISOString()
+                              };
+                              const words = new Set(content.toLowerCase().match(/\b\w{3,}\b/g) || []);
+                              words.forEach(word => {
+                                  if (!index.terms[word]) index.terms[word] = { f: [], s: [] };
+                                  index.terms[word].s.push(snap.id);
+                              });
+                          }
+                      } catch (e) {}
+                  }
+              }
+          }
+
+          searchIndex = index;
+          // Optionally save to disk
+          const indexPath = path.join(historyDir || repoPath, 'search_index.json');
+          fs.writeFileSync(indexPath, JSON.stringify(index));
+          
+          return { success: true, fileCount: files.length, termCount: Object.keys(index.terms).length };
+      } catch (e) {
+          console.error("Indexing failed:", e);
+          throw e;
+      }
+  });
+
+  ipcMain.handle('search:indexedSearch', async (_, { query }) => {
+      if (!searchIndex) return { files: [], snapshots: [] };
+      
+      const words = query.toLowerCase().match(/\b\w{3,}\b/g) || [];
+      if (words.length === 0) return { files: [], snapshots: [] };
+
+      let fileMatches = new Set();
+      let snapMatches = new Set();
+
+      words.forEach((word, i) => {
+          const match = searchIndex.terms[word];
+          if (match) {
+              if (i === 0) {
+                  match.f.forEach(f => fileMatches.add(f));
+                  match.s.forEach(s => snapMatches.add(s));
+              } else {
+                  fileMatches = new Set([...fileMatches].filter(f => match.f.includes(f)));
+                  snapMatches = new Set([...snapMatches].filter(s => match.s.includes(s)));
+              }
+          } else {
+              fileMatches.clear();
+              snapMatches.clear();
+          }
+      });
+
+      return {
+          files: Array.from(fileMatches).map(f => ({ path: f })),
+          snapshots: Array.from(snapMatches).map(id => ({ 
+              id, 
+              ...searchIndex.snapshots[id] 
+          }))
+      };
+  });
+
   ipcMain.handle('dialog:openDirectory', async () => {
     const { canceled, filePaths } = await dialog.showOpenDialog(mainWindow, {
       properties: ['openDirectory'],

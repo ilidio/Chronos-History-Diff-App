@@ -282,6 +282,14 @@ export async function grepHistory(repoPath: string, pattern: string): Promise<st
     return safeInvoke('git:grepHistory', { repoPath, pattern });
 }
 
+export async function rebuildIndex(repoPath: string): Promise<any> {
+    return safeInvoke('search:rebuildIndex', repoPath);
+}
+
+export async function indexedSearch(query: string): Promise<{ files: any[], snapshots: any[] }> {
+    return safeInvoke('search:indexedSearch', { query });
+}
+
 // Dialog for opening a directory
 export async function getLocalBlame(
     repoPath: string, 

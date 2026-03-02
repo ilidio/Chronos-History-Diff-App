@@ -5,7 +5,7 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } f
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { 
-    Search, Settings, History, Layout, Command, Sparkles, FileCode, ArrowRightLeft, Info,
+    Search, Settings, History, Layout, Command, Sparkles, FileCode, ArrowRightLeft, Info, Hash,
 } from 'lucide-react';
 
 interface HelpDialogProps {
@@ -156,11 +156,37 @@ export default function HelpDialog({ open, onOpenChange }: HelpDialogProps) {
                                 <TabsContent value="search" className="space-y-16 mt-0 pb-[15px]">
                                     <section className="space-y-4">
                                         <h3 className="text-xl font-bold flex items-center gap-3">
-                                            <Search className="h-5 w-5 text-primary" /> Deep History Search
+                                            <Search className="h-5 w-5 text-primary" /> History & Project Search
                                         </h3>
-                                        <div className="p-5 rounded-xl bg-muted/20 border border-muted-foreground/10">
+                                        <div className="grid grid-cols-1 gap-6">
+                                            <div className="p-5 rounded-xl bg-muted/20 border border-muted-foreground/10">
+                                                <div className="text-sm font-bold mb-2 flex items-center gap-2">
+                                                    <Search className="h-4 w-4 text-primary" /> Deep Grep
+                                                </div>
+                                                <p className="text-xs text-muted-foreground leading-relaxed">
+                                                    Uses Git primitives to search through your entire repository history. Find exactly when a function was added, modified, or removed across all commits.
+                                                </p>
+                                            </div>
+                                            <div className="p-5 rounded-xl bg-muted/20 border border-muted-foreground/10">
+                                                <div className="text-sm font-bold mb-2 flex items-center gap-2">
+                                                    <Hash className="h-4 w-4 text-primary" /> Indexed Search
+                                                </div>
+                                                <p className="text-xs text-muted-foreground leading-relaxed">
+                                                    Near-instant keyword search across your <strong>current working files</strong> and <strong>local Chronos history</strong> snapshots. Use the "Rebuild" button to refresh the search index when your project changes significantly.
+                                                </p>
+                                            </div>
+                                            <div className="p-5 rounded-xl bg-muted/20 border border-muted-foreground/10">
+                                                <div className="text-sm font-bold mb-2 flex items-center gap-2">
+                                                    <Sparkles className="h-4 w-4 text-primary" /> Semantic Search
+                                                </div>
+                                                <p className="text-xs text-muted-foreground leading-relaxed">
+                                                    AI-powered intent search. Instead of exact matches, describe what you're looking for (e.g., "fix for login bug") to find relevant historical versions.
+                                                </p>
+                                            </div>
+                                        </div>
+                                        <div className="p-5 rounded-xl bg-primary/5 border border-primary/10 mt-4">
                                             <p className="text-xs text-muted-foreground leading-relaxed">
-                                                Click the <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 16 16" className="h-3 w-3 inline text-primary"><circle cx="8" cy="8" r="3" fill="currentColor"/><path fill="currentColor" d="M8 1C4.134 1 1 4.134 1 8c0 1.25.33 2.42.9 3.44l1.35-.78A5.5 5.5 0 0 1 2.5 8c0-3.038 2.462-5.5 5.5-5.5s5.5 2.462 5.5 5.5-2.462 5.5-5.5 5.5a5.48 5.48 0 0 1-2.43-.57l-1.35.78A6.97 6.97 0 0 0 8 15c3.866 0 7-3.134 7-7s-3.134-7-7-7z"/><path fill="currentColor" d="M11.5 8a3.5 3.5 0 0 1-3.5 3.5 3.48 3.48 0 0 1-1.55-.36l-.87.5a4.5 4.5 0 0 0 5.92-5.92l-.87.5c.23.4.37.87.37 1.28z"/></svg> (Black Hole) icon in the top right of the sidebar to open the Grep Search dialog. Find every instance where a string was added or removed across the entire repository history.
+                                                Access these tools by clicking the <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 16 16" className="h-3 w-3 inline text-primary"><circle cx="8" cy="8" r="3" fill="currentColor"/><path fill="currentColor" d="M8 1C4.134 1 1 4.134 1 8c0 1.25.33 2.42.9 3.44l1.35-.78A5.5 5.5 0 0 1 2.5 8c0-3.038 2.462-5.5 5.5-5.5s5.5 2.462 5.5 5.5-2.462 5.5-5.5 5.5a5.48 5.48 0 0 1-2.43-.57l-1.35.78A6.97 6.97 0 0 0 8 15c3.866 0 7-3.134 7-7s-3.134-7-7-7z"/><path fill="currentColor" d="M11.5 8a3.5 3.5 0 0 1-3.5 3.5 3.48 3.48 0 0 1-1.55-.36l-.87.5a4.5 4.5 0 0 0 5.92-5.92l-.87.5c.23.4.37.87.37 1.28z"/></svg> (Black Hole) icon in the top right of the sidebar.
                                             </p>
                                         </div>
                                     </section>

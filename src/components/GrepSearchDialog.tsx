@@ -6,21 +6,23 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
-import { grepHistory, semanticSearch, getLog } from '@/lib/electron';
-import { Search, Loader2, Calendar, User, Hash, Sparkles } from 'lucide-react';
+import { grepHistory, semanticSearch, getLog, rebuildIndex, indexedSearch } from '@/lib/electron';
+import { Search, Loader2, Calendar, User, Hash, Sparkles, RefreshCw, FileText, History } from 'lucide-react';
 
 interface GrepSearchDialogProps {
     open: boolean;
     onOpenChange: (open: boolean) => void;
     repoPath: string;
     onCommitSelect: (commit: any) => void;
+    onFileSelect?: (filePath: string) => void;
 }
 
-export default function GrepSearchDialog({ open, onOpenChange, repoPath, onCommitSelect }: GrepSearchDialogProps) {
+export default function GrepSearchDialog({ open, onOpenChange, repoPath, onCommitSelect, onFileSelect }: GrepSearchDialogProps) {
     const [pattern, setPattern] = useState('');
     const [results, setResults] = useState<any[]>([]);
     const [loading, setLoading] = useState(false);
-    const [searchMode, setSearchMode] = useState<'grep' | 'semantic'>('grep');
+    const [searchMode, setSearchMode] = useState<'grep' | 'semantic' | 'indexed'>('grep');
+    const [isIndexing, setIsIndexing] = useState(false);
 
     const handleSearch = async () => {
         if (!pattern || !repoPath) return;
@@ -30,9 +32,15 @@ export default function GrepSearchDialog({ open, onOpenChange, repoPath, onCommi
                 const output = await grepHistory(repoPath, pattern);
                 const parsed = output.split('\n').filter((l: string) => l && l.includes('|')).map((line: string) => {
                     const [id, author, date, message] = line.split('|');
-                    return { id, author, date, message };
+                    return { id, author, date, message, type: 'git' };
                 });
                 setResults(parsed);
+            } else if (searchMode === 'indexed') {
+                const { files, snapshots } = await indexedSearch(pattern);
+                setResults([
+                    ...files.map(f => ({ ...f, type: 'file' })),
+                    ...snapshots.map(s => ({ ...s, type: 'snapshot' }))
+                ]);
             } else {
                 await handleSemanticSearch();
             }
@@ -44,18 +52,34 @@ export default function GrepSearchDialog({ open, onOpenChange, repoPath, onCommi
         }
     };
 
+    const handleRebuild = async () => {
+        if (!repoPath) return;
+        setIsIndexing(true);
+        try {
+            const stats = await rebuildIndex(repoPath);
+            alert(`Index rebuilt! Scanned ${stats.fileCount} files and indexed ${stats.termCount} unique terms.`);
+        } catch (e) {
+            console.error(e);
+            alert("Indexing failed. Check console.");
+        } finally {
+            setIsIndexing(false);
+        }
+    };
+
     const renderResults = () => {
         if (results.length === 0 && !loading) {
             return (
                 <div className="text-center text-muted-foreground py-16 flex flex-col items-center gap-4 opacity-50">
                     <div className="w-16 h-16 bg-muted rounded-full flex items-center justify-center">
-                        {searchMode === 'grep' ? <Search className="h-8 w-8" /> : <Sparkles className="h-8 w-8" />}
+                        {searchMode === 'grep' ? <Search className="h-8 w-8" /> : searchMode === 'semantic' ? <Sparkles className="h-8 w-8" /> : <Hash className="h-8 w-8" />}
                     </div>
                     <div className="max-w-xs mx-auto">
                         <p className="font-bold text-sm uppercase tracking-wider mb-1">No results yet</p>
                         <p className="text-xs">
                             {searchMode === 'grep' 
-                                ? "Enter a regex pattern to deep search file contents." 
+                                ? "Enter a regex pattern to deep search Git history." 
+                                : searchMode === 'indexed'
+                                ? "Search current files and local history instantly."
                                 : "Use natural language to search for intent across commits."}
                         </p>
                     </div>
@@ -63,38 +87,66 @@ export default function GrepSearchDialog({ open, onOpenChange, repoPath, onCommi
             );
         }
 
-        return results.map((commit) => (
-            <div 
-                key={commit.id} 
-                className="p-4 rounded-xl border bg-background hover:border-primary/50 hover:shadow-md cursor-pointer transition-all group relative overflow-hidden"
-                onClick={() => {
-                    onCommitSelect(commit);
-                    onOpenChange(false);
-                }}
-            >
-                <div className="absolute top-0 left-0 w-1 h-full bg-primary opacity-0 group-hover:opacity-100 transition-opacity" />
-                <div className="flex items-center justify-between mb-2">
-                    <div className="flex items-center gap-2 text-xs font-mono text-primary font-bold bg-primary/5 px-2 py-0.5 rounded">
-                        <Hash className="h-3 w-3" />
-                        {commit.id.substring(0, 7)}
+        return results.map((item, idx) => {
+            if (item.type === 'file') {
+                return (
+                    <div 
+                        key={`file-${idx}`} 
+                        className="p-4 rounded-xl border bg-background hover:border-blue-500/50 hover:shadow-md cursor-pointer transition-all group relative overflow-hidden"
+                        onClick={() => {
+                            onFileSelect?.(item.path);
+                            onOpenChange(false);
+                        }}
+                    >
+                        <div className="absolute top-0 left-0 w-1 h-full bg-blue-500 opacity-0 group-hover:opacity-100 transition-opacity" />
+                        <div className="flex items-center justify-between mb-2">
+                            <div className="flex items-center gap-2 text-xs font-mono text-blue-500 font-bold bg-blue-500/5 px-2 py-0.5 rounded uppercase">
+                                <FileText className="h-3 w-3" />
+                                Working File
+                            </div>
+                        </div>
+                        <div className="text-sm font-bold truncate">{item.path}</div>
                     </div>
-                    <div className="flex items-center gap-2 text-[10px] font-bold text-muted-foreground uppercase tracking-tighter">
-                        <Calendar className="h-3 w-3" />
-                        {new Date(commit.date).toLocaleDateString(undefined, { month: 'short', day: 'numeric', year: 'numeric' })}
+                );
+            }
+
+            const isSnapshot = item.type === 'snapshot';
+            const colorClass = isSnapshot ? 'text-orange-500' : 'text-primary';
+            const bgColorClass = isSnapshot ? 'bg-orange-500/5' : 'bg-primary/5';
+            const barColorClass = isSnapshot ? 'bg-orange-500' : 'bg-primary';
+
+            return (
+                <div 
+                    key={item.id} 
+                    className={`p-4 rounded-xl border bg-background hover:border-${isSnapshot ? 'orange-500' : 'primary'}/50 hover:shadow-md cursor-pointer transition-all group relative overflow-hidden`}
+                    onClick={() => {
+                        onCommitSelect(item);
+                        onOpenChange(false);
+                    }}
+                >
+                    <div className={`absolute top-0 left-0 w-1 h-full ${barColorClass} opacity-0 group-hover:opacity-100 transition-opacity`} />
+                    <div className="flex items-center justify-between mb-2">
+                        <div className={`flex items-center gap-2 text-xs font-mono ${colorClass} font-bold ${bgColorClass} px-2 py-0.5 rounded`}>
+                            {isSnapshot ? <History className="h-3 w-3" /> : <Hash className="h-3 w-3" />}
+                            {isSnapshot ? 'Local Snapshot' : item.id.substring(0, 7)}
+                        </div>
+                        {item.date && (
+                            <div className="flex items-center gap-2 text-[10px] font-bold text-muted-foreground uppercase tracking-tighter">
+                                <Calendar className="h-3 w-3" />
+                                {new Date(item.date).toLocaleDateString(undefined, { month: 'short', day: 'numeric', year: 'numeric' })}
+                            </div>
+                        )}
+                    </div>
+                    <div className="text-sm font-bold mb-2 group-hover:text-primary transition-colors leading-tight">{item.message}</div>
+                    <div className="flex items-center gap-3">
+                        <div className="flex items-center gap-1.5 text-[10px] font-medium text-muted-foreground bg-muted px-2 py-1 rounded-full">
+                            <User className="h-3 w-3" />
+                            {item.author || 'Local User'}
+                        </div>
                     </div>
                 </div>
-                <div className="text-sm font-bold mb-2 group-hover:text-primary transition-colors leading-tight">{commit.message}</div>
-                <div className="flex items-center gap-3">
-                    <div className="flex items-center gap-1.5 text-[10px] font-medium text-muted-foreground bg-muted px-2 py-1 rounded-full">
-                        <User className="h-3 w-3" />
-                        {commit.author}
-                    </div>
-                    {searchMode === 'semantic' && (
-                        <span className="text-[10px] text-primary/60 font-black uppercase tracking-widest italic animate-pulse">Semantic Match</span>
-                    )}
-                </div>
-            </div>
-        ));
+            );
+        });
     };
 
     const handleSemanticSearch = async () => {
@@ -134,12 +186,15 @@ export default function GrepSearchDialog({ open, onOpenChange, repoPath, onCommi
 
                 <Tabs value={searchMode} onValueChange={(v) => setSearchMode(v as any)} className="flex-1 flex flex-col min-h-0">
                     <div className="px-6 pt-2">
-                        <TabsList className="grid w-full grid-cols-2 mb-4 bg-muted/50 p-1">
+                        <TabsList className="grid w-full grid-cols-3 mb-4 bg-muted/50 p-1">
                             <TabsTrigger value="grep" className="gap-2 data-[state=active]:bg-background data-[state=active]:shadow-sm">
                                 <Search className="h-3 w-3" /> Deep Grep
                             </TabsTrigger>
+                            <TabsTrigger value="indexed" className="gap-2 data-[state=active]:bg-background data-[state=active]:shadow-sm">
+                                <Hash className="h-3 w-3" /> Indexed
+                            </TabsTrigger>
                             <TabsTrigger value="semantic" className="gap-2 data-[state=active]:bg-background data-[state=active]:shadow-sm data-[state=active]:text-primary">
-                                <Sparkles className="h-3 w-3" /> Semantic Search
+                                <Sparkles className="h-3 w-3" /> Semantic
                             </TabsTrigger>
                         </TabsList>
 
@@ -147,7 +202,7 @@ export default function GrepSearchDialog({ open, onOpenChange, repoPath, onCommi
                             <div className="relative flex-1 group">
                                 <Search className="absolute left-3 top-3 h-4 w-4 text-muted-foreground group-focus-within:text-primary transition-colors" />
                                 <Input 
-                                    placeholder={searchMode === 'grep' ? "Regex or string (e.g. functionName)..." : "Describe what you're looking for (e.g. login fix)..."} 
+                                    placeholder={searchMode === 'grep' ? "Regex or string (e.g. functionName)..." : searchMode === 'indexed' ? "Keywords (instant search)..." : "Describe what you're looking for..."} 
                                     className="pl-10 h-11 border-muted-foreground/20 focus:border-primary/50 transition-all"
                                     value={pattern}
                                     onChange={e => setPattern(e.target.value)}
@@ -157,10 +212,24 @@ export default function GrepSearchDialog({ open, onOpenChange, repoPath, onCommi
                             <Button onClick={handleSearch} disabled={loading || !pattern} size="lg" className="h-11 px-6 font-bold shadow-lg shadow-primary/20">
                                 {loading ? <Loader2 className="animate-spin h-4 w-4" /> : 'Search'}
                             </Button>
+                            {searchMode === 'indexed' && (
+                                <Button variant="outline" onClick={handleRebuild} disabled={isIndexing} size="lg" className="h-11 px-4 gap-2 border-primary/20 hover:bg-primary/5">
+                                    <RefreshCw className={`h-4 w-4 ${isIndexing ? 'animate-spin' : ''}`} />
+                                    {isIndexing ? 'Indexing...' : 'Rebuild'}
+                                </Button>
+                            )}
                         </div>
                     </div>
 
                     <TabsContent value="grep" className="flex-1 min-h-0 m-0 border-t outline-none data-[state=inactive]:hidden">
+                        <ScrollArea className="h-full w-full">
+                            <div className="p-6 space-y-3">
+                                {renderResults()}
+                            </div>
+                        </ScrollArea>
+                    </TabsContent>
+
+                    <TabsContent value="indexed" className="flex-1 min-h-0 m-0 border-t outline-none data-[state=inactive]:hidden">
                         <ScrollArea className="h-full w-full">
                             <div className="p-6 space-y-3">
                                 {renderResults()}
