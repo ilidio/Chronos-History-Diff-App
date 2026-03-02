@@ -9,11 +9,11 @@
   "main": "main.js",
   "scripts": {
     "dev": "concurrently \"next dev --webpack --experimental-https\" \"NODE_TLS_REJECT_UNAUTHORIZED=0 wait-on https://localhost:3000 && electron .\"",
-    "build": "NODE_OPTIONS='--max-old-space-size=4096' next build",
+    "build": "next build",
     "start": "next start",
     "lint": "next lint",
     "electron": "electron .",
-    "dist": "next build --webpack && electron-builder",
+    "dist": "npm run build -- --webpack && electron-builder",
     "test": "vitest",
     "postinstall": "bash generate-certs.sh"
   },
