@@ -52,7 +52,7 @@ export default function CompareFilesDialog({ open, onOpenChange, repoPath, initi
         if (open) {
             if (initialFileA) {
                 setPathA(initialFileA);
-                if (!pathB) setPathB(initialFileA); 
+                setPathB(initialFileA); 
                 if (modeA === 'history') loadHistory(initialFileA);
                 if (modeA === 'git') loadGitHistory(initialFileA);
                 if (modeB === 'history') loadHistory(initialFileA);
@@ -69,6 +69,10 @@ export default function CompareFilesDialog({ open, onOpenChange, repoPath, initi
             loadBranches();
             loadRepoHistory();
         } else {
+            setPathA('');
+            setPathB('');
+            setRefA('');
+            setRefB('');
             setDiffData(null);
             setEditableContent(null);
             setIsHeaderVisible(true);
@@ -115,7 +119,10 @@ export default function CompareFilesDialog({ open, onOpenChange, repoPath, initi
 
     const getRelativePath = (absPath: string) => {
         if (!absPath || !repoPath) return absPath;
-        if (absPath.startsWith(repoPath)) {
+        const normAbs = absPath.replace(/\\/g, '/').toLowerCase();
+        const normRepo = repoPath.replace(/\\/g, '/').toLowerCase();
+
+        if (normAbs.startsWith(normRepo)) {
             let rel = absPath.substring(repoPath.length);
             if (rel.startsWith('/') || rel.startsWith('\\')) rel = rel.substring(1);
             return rel;

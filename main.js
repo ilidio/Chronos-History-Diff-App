@@ -990,8 +990,8 @@ Summary:`;
           try {
               if (gitRef) {
                   console.log(`[Compare] Fetching git content for ${gitRef}:${normalizedFilePath}`);
-                  // If git show fails (e.g. file didn't exist in that ref), return empty string instead of crashing
-                  return await runGit(`git show "${gitRef}:${normalizedFilePath}"`, repoPath, { trim: false }).catch(() => '');
+                  // No longer swallowing errors here, let them propagate to the UI
+                  return await runGit(`git show "${gitRef}:${normalizedFilePath}"`, repoPath, { trim: false });
               } else {
                   // 1. Check if path is absolute
                   if (path.isAbsolute(filePath)) {
