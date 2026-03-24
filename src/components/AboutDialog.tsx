@@ -44,13 +44,23 @@ export default function AboutDialog({ open, onOpenChange, appVersion }: AboutDia
                     </p>
 
                     <p className="text-xs text-muted-foreground pt-4">
-                        {/* Optional: Add more cool stuff here */}
                         Efficiently track and compare file changes across local history and Git.
                     </p>
                 </div>
 
+                <div className="pt-6 mt-6 border-t flex flex-col items-center">
+                    <p className="text-[10px] font-semibold uppercase tracking-[0.2em] text-muted-foreground mb-4 opacity-60">
+                        A product of
+                    </p>
+                    <img 
+                        src="/m0k4_tools.png" 
+                        alt="M0K4 Tools" 
+                        className="h-10 w-auto opacity-70 hover:opacity-100 transition-all duration-300 grayscale hover:grayscale-0 cursor-default"
+                    />
+                </div>
+
                 <div className="flex justify-center mt-6">
-                    <Button onClick={() => onOpenChange(false)}>Close</Button>
+                    <Button onClick={() => onOpenChange(false)} variant="outline" className="min-w-24">Close</Button>
                 </div>
             </DialogContent>
         </Dialog>
