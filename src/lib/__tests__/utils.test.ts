@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { getLanguageFromPath } from '@/app/page';
+import { getLanguageFromPath } from '@/lib/utils';
 
 describe('getLanguageFromPath', () => {
   it('identifies common programming languages', () => {

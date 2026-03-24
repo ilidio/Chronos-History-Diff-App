@@ -206,6 +206,7 @@ export async function getRepoStatus(repoPath: string): Promise<any> {
         if (status === 'M ') readableStatus = 'Staged';
         if (status === ' M') readableStatus = 'Unstaged';
         if (status === 'A ') readableStatus = 'Added';
+        if (status === '??') readableStatus = 'Untracked';
         return { path, status: readableStatus };
     });
     return { files };

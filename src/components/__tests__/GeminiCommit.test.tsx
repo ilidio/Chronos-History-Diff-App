@@ -1,4 +1,4 @@
-import { render, screen, fireEvent, waitFor } from '@testing-library/react';
+import { render, screen, fireEvent } from '@testing-library/react';
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import Home from '@/app/page';
 import React from 'react';
@@ -8,22 +8,24 @@ vi.mock('@/lib/electron', () => ({
   getRepoStatus: vi.fn().mockResolvedValue({ files: [] }),
   getLog: vi.fn().mockResolvedValue([]),
   getBranches: vi.fn().mockResolvedValue([]),
-  getStashes: vi.fn().mockResolvedValue([]),
-  getTags: vi.fn().mockResolvedValue(''),
-  generateAICommitMessage: vi.fn().mockResolvedValue('feat: implementation of tests'),
-  reviewChanges: vi.fn().mockResolvedValue('AI Review Result'),
-  getDiffFile: vi.fn().mockResolvedValue('fake diff content'),
-  getConfig: vi.fn().mockResolvedValue(''),
-  getCustomGraph: vi.fn().mockResolvedValue(''),
+  readChronosHistoryIndex: vi.fn().mockResolvedValue({ snapshots: [] }),
+  readAllFiles: vi.fn().mockResolvedValue([]),
+  onMenuOpenFolder: vi.fn().mockReturnValue(vi.fn()),
+  onMenuOpenFile: vi.fn().mockReturnValue(vi.fn()),
+  addToRecentFile: vi.fn(),
+  lsFiles: vi.fn().mockResolvedValue(''),
 }));
 
-describe('Gemini AI Commit Message', () => {
+// Mock the dialog component to check if it opens
+vi.mock('@/components/DailyBriefDialog', () => ({
+    default: ({ open }: { open: boolean }) => open ? <div data-testid="daily-brief-dialog">Daily Briefing</div> : null
+}));
+
+describe('AI Daily Briefing', () => {
   beforeEach(() => {
     // Mock localStorage
     const mockLocalStorage: Record<string, string> = {
         'ai_api_key': 'fake-key',
-        'ai_provider': 'gemini',
-        'ai_model': 'gemini-3-flash-preview'
     };
     global.localStorage = {
       getItem: vi.fn((key) => mockLocalStorage[key] || null),
@@ -35,44 +37,14 @@ describe('Gemini AI Commit Message', () => {
     } as any;
   });
 
-  it('calls generateAICommitMessage and updates textarea', async () => {
-    const { generateAICommitMessage } = await import('@/lib/electron');
-    
+  it('opens DailyBriefDialog when the briefing button is clicked', () => {
     render(<Home />);
     
-    // Check if the AI button is present
-    const aiButton = screen.getByTitle('Generate Commit Message with AI');
-    expect(aiButton).toBeInTheDocument();
+    const briefingButton = screen.getByTitle('Daily Progress Briefing');
+    expect(briefingButton).toBeInTheDocument();
 
-    // Trigger click
-    fireEvent.click(aiButton);
+    fireEvent.click(briefingButton);
     
-    await waitFor(() => {
-      expect(generateAICommitMessage).toHaveBeenCalled();
-    });
-
-    const textarea = screen.getByPlaceholderText('Commit message...');
-    expect(textarea).toHaveValue('feat: implementation of tests');
-  });
-
-  it('calls reviewChanges and opens ReviewDialog', async () => {
-    const { reviewChanges } = await import('@/lib/electron');
-    (reviewChanges as any).mockResolvedValue('AI Review Result');
-
-    render(<Home />);
-    
-    // Find the Review button (Shield icon)
-    const reviewButton = screen.getByTitle('AI Code Review');
-    expect(reviewButton).toBeInTheDocument();
-
-    // Trigger click
-    fireEvent.click(reviewButton);
-    
-    await waitFor(() => {
-      expect(reviewChanges).toHaveBeenCalled();
-    });
-
-    // Check if dialog content appears
-    expect(screen.getByText(/AI Review Result/i)).toBeInTheDocument();
+    expect(screen.getByTestId('daily-brief-dialog')).toBeInTheDocument();
   });
 });
