@@ -79,6 +79,7 @@ export default function DiffView({
   const [exporting, setExporting] = useState(false);
   const editorRef = useRef<any>(null);
   const modelsRef = useRef<{ original: any, modified: any } | null>(null);
+  const shouldScrollRef = useRef<boolean>(false);
 
   const handleSummarize = async () => {
     if (!original && !modified) return;
@@ -381,6 +382,24 @@ export default function DiffView({
     editor.getModifiedEditor().onDidChangeCursorSelection(handleSelection);
     editor.getOriginalEditor().onDidChangeCursorSelection(handleSelection);
 
+    // Auto-scroll to first change when diff is updated
+    editor.onDidUpdateDiff(() => {
+        if (shouldScrollRef.current && editorRef.current) {
+            const changes = editorRef.current.getLineChanges();
+            if (changes && changes.length > 0) {
+                const firstChange = changes[0];
+                
+                // Use modifiedStartLineNumber as primary target
+                const modifiedLine = firstChange.modifiedStartLineNumber || 1;
+                const originalLine = firstChange.originalStartLineNumber || 1;
+                
+                editorRef.current.getModifiedEditor().revealLineInCenter(modifiedLine);
+                editorRef.current.getOriginalEditor().revealLineInCenter(originalLine);
+            }
+            shouldScrollRef.current = false;
+        }
+    });
+
     // Add Context Menu Actions
     const addActions = (ed: any, isOriginal: boolean = false) => {
         if (isOriginal) {
@@ -487,9 +506,11 @@ export default function DiffView({
 
           if (originalModel.getValue() !== original) {
             originalModel.setValue(original || '');
+            shouldScrollRef.current = true;
           }
           if (modifiedModel.getValue() !== modified) {
             modifiedModel.setValue(modified || '');
+            shouldScrollRef.current = true;
           }
           
           // Re-attach the updated models
