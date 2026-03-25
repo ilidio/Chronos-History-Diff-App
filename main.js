@@ -990,7 +990,6 @@ Summary:`;
           try {
               if (gitRef) {
                   console.log(`[Compare] Fetching git content for ${gitRef}:${normalizedFilePath}`);
-                  // No longer swallowing errors here, let them propagate to the UI
                   return await runGit(`git show "${gitRef}:${normalizedFilePath}"`, repoPath, { trim: false });
               } else {
                   // 1. Check if path is absolute
@@ -1019,8 +1018,9 @@ Summary:`;
                   return '';
               }
           } catch (e) {
-              console.error(`[Compare] Error reading ${normalizedFilePath} (${gitRef || 'Working'}):`, e);
-              throw e; // Throw so the UI can report the failure
+              console.warn(`[Compare] Error reading ${normalizedFilePath} (${gitRef || 'Working'}):`, e.message);
+              // For comparison, we return empty string if the file/ref doesn't exist
+              return '';
           }
       };
 

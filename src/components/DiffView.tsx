@@ -361,8 +361,12 @@ export default function DiffView({
 
     // Listen for selection changes in both editors
     const handleSelection = () => {
-        if (!onSelectionChange) return;
+        if (!onSelectionChange || !editorRef.current) return;
         
+        // Safety check to ensure models are still attached
+        const models = editorRef.current.getModel();
+        if (!models || !models.original || !models.modified) return;
+
         const selection = editor.getModifiedEditor().getSelection() || editor.getOriginalEditor().getSelection();
         if (selection && !selection.isEmpty()) {
             onSelectionChange({
@@ -473,20 +477,38 @@ export default function DiffView({
 
   // Update model content when props change
   useEffect(() => {
-    if (modelsRef.current) {
+    if (modelsRef.current && editorRef.current) {
       const { original: originalModel, modified: modifiedModel } = modelsRef.current;
       
-      // Prevent crash if cursor is on a line that won't exist in the new content
-      if (editorRef.current) {
-          editorRef.current.getOriginalEditor().setPosition({ lineNumber: 1, column: 1 });
-          editorRef.current.getModifiedEditor().setPosition({ lineNumber: 1, column: 1 });
-      }
+      try {
+          // Detach models temporarily to prevent the editor from trying to render
+          // invalid line numbers while we are updating the model content
+          editorRef.current.setModel(null);
 
-      if (originalModel.getValue() !== original) {
-        originalModel.setValue(original || '');
-      }
-      if (modifiedModel.getValue() !== modified) {
-        modifiedModel.setValue(modified || '');
+          if (originalModel.getValue() !== original) {
+            originalModel.setValue(original || '');
+          }
+          if (modifiedModel.getValue() !== modified) {
+            modifiedModel.setValue(modified || '');
+          }
+          
+          // Re-attach the updated models
+          editorRef.current.setModel({
+            original: originalModel,
+            modified: modifiedModel
+          });
+
+          // Reset scroll and position to a safe place (top)
+          const originalEditor = editorRef.current.getOriginalEditor();
+          const modifiedEditor = editorRef.current.getModifiedEditor();
+          
+          originalEditor.setPosition({ lineNumber: 1, column: 1 });
+          originalEditor.setScrollTop(0);
+          
+          modifiedEditor.setPosition({ lineNumber: 1, column: 1 });
+          modifiedEditor.setScrollTop(0);
+      } catch (e) {
+          console.error("Error updating editor models:", e);
       }
     }
   }, [original, modified]);
