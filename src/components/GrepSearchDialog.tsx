@@ -251,6 +251,7 @@ export default function GrepSearchDialog({ open, onOpenChange, repoPath, onCommi
                                     onClick={() => setShowFilters(!showFilters)}
                                     className="h-11 px-3"
                                     title="Toggle Filters"
+                                    disabled={results.length === 0 && !loading && !showFilters}
                                 >
                                     <Calendar className="h-4 w-4" />
                                 </Button>
