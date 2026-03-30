@@ -239,7 +239,7 @@ export default function GrepSearchDialog({ open, onOpenChange, repoPath, onCommi
 
     return (
         <Dialog open={open} onOpenChange={onOpenChange}>
-            <DialogContent className={`${isMaximized ? 'max-w-[98vw] h-[98vh]' : 'max-w-5xl h-[750px]'} flex flex-col p-0 overflow-hidden bg-background border-primary/20 shadow-2xl transition-all duration-300 ease-in-out`}>
+            <DialogContent className={`${isMaximized ? 'sm:max-w-[98vw] w-[98vw] h-[98vh]' : 'sm:max-w-5xl w-full h-[750px]'} flex flex-col p-0 overflow-hidden bg-background border-primary/20 shadow-2xl transition-all duration-300 ease-in-out`}>
                 <div className="p-6 border-b bg-muted/5 flex items-center justify-between">
                     <div>
                         <DialogTitle className="text-xl font-bold flex items-center gap-2">
