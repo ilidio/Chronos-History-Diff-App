@@ -812,12 +812,49 @@ Summary:`;
   });
 
   ipcMain.handle('git:grepHistory', async (_, { repoPath, pattern, user, since, until }) => {
-      // git log -G "pattern"
-      let command = `git log -G "${pattern}" --pretty=format:"%H|%an|%ad|%s" --date=iso`;
+      // git log -G "pattern" --name-only to see which files changed
+      let command = `git log -G "${pattern}" --pretty=format:"COMMIT|%H|%an|%ad|%s" --date=iso --name-only`;
       if (user) command += ` --author="${user}"`;
       if (since) command += ` --since="${since}"`;
       if (until) command += ` --until="${until}"`;
-      return await runGit(command, repoPath);
+      
+      const output = await runGit(command, repoPath);
+      const results = [];
+      const lines = output.split('\n');
+      let currentCommit = null;
+
+      for (const line of lines) {
+          if (line.startsWith('COMMIT|')) {
+              const [_, id, author, date, message] = line.split('|');
+              currentCommit = { id, author, date, message, type: 'git', files: [] };
+              results.push(currentCommit);
+          } else if (line.trim() && currentCommit) {
+              currentCommit.files.push(line.trim());
+          }
+      }
+      return results;
+  });
+
+  ipcMain.handle('git:getSearchSnippet', async (_, { repoPath, commitId, pattern, filePath }) => {
+      try {
+          // Use git show with -G to find the diff lines containing the pattern
+          const command = `git show -G"${pattern}" "${commitId}" -- "${filePath}"`;
+          const output = await runGit(command, repoPath, { trim: false });
+          
+          // Find the first matching line in the diff and return some context
+          const lines = output.split('\n');
+          const matchIndex = lines.findIndex(l => l.includes(pattern) && (l.startsWith('+') || l.startsWith('-')));
+          
+          if (matchIndex !== -1) {
+              const start = Math.max(0, matchIndex - 3);
+              const end = Math.min(lines.length, matchIndex + 4);
+              return lines.slice(start, end).join('\n');
+          }
+          return null;
+      } catch (e) {
+          console.error("Failed to get snippet:", e);
+          return null;
+      }
   });
 
   // --- SEARCH INDEXING LOGIC ---

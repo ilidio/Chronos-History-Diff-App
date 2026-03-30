@@ -279,8 +279,12 @@ export async function getSearchHistory(repoPath: string, filePath: string, searc
     return safeInvoke('git:searchHistory', { repoPath, filePath, searchText });
 }
 
-export async function grepHistory(repoPath: string, pattern: string, user?: string, since?: string, until?: string): Promise<string> {
+export async function grepHistory(repoPath: string, pattern: string, user?: string, since?: string, until?: string): Promise<any[]> {
     return safeInvoke('git:grepHistory', { repoPath, pattern, user, since, until });
+}
+
+export async function getSearchSnippet(repoPath: string, commitId: string, pattern: string, filePath: string): Promise<string | null> {
+    return safeInvoke('git:getSearchSnippet', { repoPath, commitId, pattern, filePath });
 }
 
 export async function rebuildIndex(repoPath: string): Promise<any> {
