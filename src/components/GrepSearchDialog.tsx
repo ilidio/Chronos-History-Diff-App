@@ -7,8 +7,15 @@ import { Input } from '@/components/ui/input';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { grepHistory, semanticSearch, getLog, rebuildIndex, indexedSearch, getSearchSnippet } from '@/lib/electron';
+import { Search, Loader2, Calendar, User, Hash, Sparkles, RefreshCw, FileText, History } from 'lucide-react';
 
-...
+interface GrepSearchDialogProps {
+    open: boolean;
+    onOpenChange: (open: boolean) => void;
+    repoPath: string;
+    onCommitSelect: (commit: any) => void;
+    onFileSelect?: (filePath: string) => void;
+}
 
 export default function GrepSearchDialog({ open, onOpenChange, repoPath, onCommitSelect, onFileSelect }: GrepSearchDialogProps) {
     const [pattern, setPattern] = useState('');
@@ -84,7 +91,33 @@ export default function GrepSearchDialog({ open, onOpenChange, repoPath, onCommi
         onOpenChange(false);
     };
 
-...
+    const highlightMatch = (text: string, query: string) => {
+        if (!query || !text) return text;
+        const parts = text.split(new RegExp(`(${query})`, 'gi'));
+        return (
+            <span>
+                {parts.map((part, i) => 
+                    part.toLowerCase() === query.toLowerCase() 
+                        ? <span key={i} className="bg-blue-500/30 text-blue-700 dark:text-blue-300 px-0.5 rounded">{part}</span> 
+                        : part
+                )}
+            </span>
+        );
+    };
+
+    const handleRebuild = async () => {
+        if (!repoPath) return;
+        setIsIndexing(true);
+        try {
+            const stats = await rebuildIndex(repoPath);
+            alert(`Index rebuilt! Scanned ${stats.fileCount} files and indexed ${stats.termCount} unique terms.`);
+        } catch (e) {
+            console.error(e);
+            alert("Indexing failed. Check console.");
+        } finally {
+            setIsIndexing(false);
+        }
+    };
 
     const renderResults = () => {
         if (results.length === 0 && !loading) {
