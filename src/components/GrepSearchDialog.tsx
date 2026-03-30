@@ -86,6 +86,16 @@ export default function GrepSearchDialog({ open, onOpenChange, repoPath, onCommi
     const handleResultDoubleClick = (item: any) => {
         if (item.type === 'file') {
             onFileSelect?.(item.path);
+        } else if (item.type === 'snapshot') {
+            // Ensure we select the file first so the history browser opens correctly
+            if (item.filePath) onFileSelect?.(item.filePath);
+            onCommitSelect(item);
+        } else if (item.type === 'git') {
+            // For git results, we need to know WHICH file was searched
+            // If the item has a list of files, select the first one to open its history
+            const targetFile = item.files?.[0];
+            if (targetFile) onFileSelect?.(targetFile);
+            onCommitSelect(item);
         } else {
             onCommitSelect(item);
         }
