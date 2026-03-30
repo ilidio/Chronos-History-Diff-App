@@ -279,16 +279,16 @@ export async function getSearchHistory(repoPath: string, filePath: string, searc
     return safeInvoke('git:searchHistory', { repoPath, filePath, searchText });
 }
 
-export async function grepHistory(repoPath: string, pattern: string): Promise<string> {
-    return safeInvoke('git:grepHistory', { repoPath, pattern });
+export async function grepHistory(repoPath: string, pattern: string, user?: string, since?: string, until?: string): Promise<string> {
+    return safeInvoke('git:grepHistory', { repoPath, pattern, user, since, until });
 }
 
 export async function rebuildIndex(repoPath: string): Promise<any> {
     return safeInvoke('search:rebuildIndex', repoPath);
 }
 
-export async function indexedSearch(query: string): Promise<{ files: any[], snapshots: any[] }> {
-    return safeInvoke('search:indexedSearch', { query });
+export async function indexedSearch(query: string, user?: string, since?: string, until?: string): Promise<{ files: any[], snapshots: any[] }> {
+    return safeInvoke('search:indexedSearch', { query, user, since, until });
 }
 
 // Dialog for opening a directory

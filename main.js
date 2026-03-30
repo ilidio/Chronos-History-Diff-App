@@ -811,9 +811,12 @@ Summary:`;
       return await runGit(command, repoPath);
   });
 
-  ipcMain.handle('git:grepHistory', async (_, { repoPath, pattern }) => {
+  ipcMain.handle('git:grepHistory', async (_, { repoPath, pattern, user, since, until }) => {
       // git log -G "pattern"
-      const command = `git log -G "${pattern}" --pretty=format:"%H|%an|%ad|%s" --date=iso`;
+      let command = `git log -G "${pattern}" --pretty=format:"%H|%an|%ad|%s" --date=iso`;
+      if (user) command += ` --author="${user}"`;
+      if (since) command += ` --since="${since}"`;
+      if (until) command += ` --until="${until}"`;
       return await runGit(command, repoPath);
   });
 
@@ -865,7 +868,8 @@ Summary:`;
                                   ...snap, // Full original snapshot object
                                   message: snap.label || snap.eventType,
                                   author: 'Local User',
-                                  date: new Date(snap.timestamp).toISOString()
+                                  date: new Date(snap.timestamp).toISOString(),
+                                  content: content // Keep content for snippets
                               };
                               const words = new Set(content.toLowerCase().match(/\b\w{3,}\b/g) || []);
                               words.forEach(word => {
@@ -890,7 +894,7 @@ Summary:`;
       }
   });
 
-  ipcMain.handle('search:indexedSearch', async (_, { query }) => {
+  ipcMain.handle('search:indexedSearch', async (_, { query, user, since, until }) => {
       if (!searchIndex) return { files: [], snapshots: [] };
       
       const words = query.toLowerCase().match(/\b\w{3,}\b/g) || [];
@@ -915,11 +919,45 @@ Summary:`;
           }
       });
 
+      // Filter by user and date
+      let filteredSnapshots = Array.from(snapMatches).map(id => ({ 
+          id, 
+          ...searchIndex.snapshots[id] 
+      }));
+
+      if (user) {
+          filteredSnapshots = filteredSnapshots.filter(s => s.author.toLowerCase().includes(user.toLowerCase()));
+      }
+      if (since) {
+          const sinceDate = new Date(since);
+          filteredSnapshots = filteredSnapshots.filter(s => new Date(s.date) >= sinceDate);
+      }
+      if (until) {
+          const untilDate = new Date(until);
+          filteredSnapshots = filteredSnapshots.filter(s => new Date(s.date) <= untilDate);
+      }
+
+      // Helper to get snippet
+      const getSnippet = (content, query) => {
+          if (!content) return null;
+          const index = content.toLowerCase().indexOf(query.toLowerCase());
+          if (index === -1) return null;
+          const start = Math.max(0, index - 40);
+          const end = Math.min(content.length, index + query.length + 40);
+          let snippet = content.substring(start, end);
+          if (start > 0) snippet = '...' + snippet;
+          if (end < content.length) snippet = snippet + '...';
+          return snippet;
+      };
+
       return {
-          files: Array.from(fileMatches).map(f => ({ path: f })),
-          snapshots: Array.from(snapMatches).map(id => ({ 
-              id, 
-              ...searchIndex.snapshots[id] 
+          files: Array.from(fileMatches).map(f => ({ 
+              path: f,
+              snippet: getSnippet(searchIndex.files[f], query)
+          })),
+          snapshots: filteredSnapshots.map(s => ({
+              ...s,
+              snippet: getSnippet(s.content, query)
           }))
       };
   });

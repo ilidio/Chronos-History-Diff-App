@@ -19,6 +19,10 @@ interface GrepSearchDialogProps {
 
 export default function GrepSearchDialog({ open, onOpenChange, repoPath, onCommitSelect, onFileSelect }: GrepSearchDialogProps) {
     const [pattern, setPattern] = useState('');
+    const [userFilter, setUserFilter] = useState('');
+    const [startDate, setStartDate] = useState('');
+    const [endDate, setEndDate] = useState('');
+    const [showFilters, setShowFilters] = useState(false);
     const [results, setResults] = useState<any[]>([]);
     const [loading, setLoading] = useState(false);
     const [searchMode, setSearchMode] = useState<'grep' | 'semantic' | 'indexed'>('grep');
@@ -29,14 +33,14 @@ export default function GrepSearchDialog({ open, onOpenChange, repoPath, onCommi
         setLoading(true);
         try {
             if (searchMode === 'grep') {
-                const output = await grepHistory(repoPath, pattern);
+                const output = await grepHistory(repoPath, pattern, userFilter, startDate, endDate);
                 const parsed = output.split('\n').filter((l: string) => l && l.includes('|')).map((line: string) => {
                     const [id, author, date, message] = line.split('|');
                     return { id, author, date, message, type: 'git' };
                 });
                 setResults(parsed);
             } else if (searchMode === 'indexed') {
-                const { files, snapshots } = await indexedSearch(pattern);
+                const { files, snapshots } = await indexedSearch(pattern, userFilter, startDate, endDate);
                 setResults([
                     ...files.map(f => ({ ...f, type: 'file' })),
                     ...snapshots.map(s => ({ ...s, type: 'snapshot' }))
@@ -64,6 +68,20 @@ export default function GrepSearchDialog({ open, onOpenChange, repoPath, onCommi
         } finally {
             setIsIndexing(false);
         }
+    };
+
+    const highlightMatch = (text: string, query: string) => {
+        if (!query || !text) return text;
+        const parts = text.split(new RegExp(`(${query})`, 'gi'));
+        return (
+            <span>
+                {parts.map((part, i) => 
+                    part.toLowerCase() === query.toLowerCase() 
+                        ? <span key={i} className="bg-blue-500/30 text-blue-700 dark:text-blue-300 px-0.5 rounded">{part}</span> 
+                        : part
+                )}
+            </span>
+        );
     };
 
     const renderResults = () => {
@@ -105,7 +123,12 @@ export default function GrepSearchDialog({ open, onOpenChange, repoPath, onCommi
                                 Working File
                             </div>
                         </div>
-                        <div className="text-sm font-bold truncate">{item.path}</div>
+                        <div className="text-sm font-bold truncate">{highlightMatch(item.path, pattern)}</div>
+                        {item.snippet && (
+                            <div className="mt-2 p-2 bg-muted/30 rounded text-xs font-mono overflow-hidden whitespace-pre-wrap border border-muted-foreground/10">
+                                {highlightMatch(item.snippet, pattern)}
+                            </div>
+                        )}
                     </div>
                 );
             }
@@ -137,11 +160,18 @@ export default function GrepSearchDialog({ open, onOpenChange, repoPath, onCommi
                             </div>
                         )}
                     </div>
-                    <div className="text-sm font-bold mb-2 group-hover:text-primary transition-colors leading-tight">{item.message}</div>
+                    <div className="text-sm font-bold mb-2 group-hover:text-primary transition-colors leading-tight">
+                        {highlightMatch(item.message, pattern)}
+                    </div>
+                    {item.snippet && (
+                        <div className="mb-3 p-2 bg-muted/30 rounded text-xs font-mono overflow-hidden whitespace-pre-wrap border border-muted-foreground/10">
+                            {highlightMatch(item.snippet, pattern)}
+                        </div>
+                    )}
                     <div className="flex items-center gap-3">
                         <div className="flex items-center gap-1.5 text-[10px] font-medium text-muted-foreground bg-muted px-2 py-1 rounded-full">
                             <User className="h-3 w-3" />
-                            {item.author || 'Local User'}
+                            {highlightMatch(item.author || 'Local User', userFilter)}
                         </div>
                     </div>
                 </div>
@@ -155,9 +185,22 @@ export default function GrepSearchDialog({ open, onOpenChange, repoPath, onCommi
             const model = localStorage.getItem('ai_model') || 'gemini-1.5-flash';
             const context = localStorage.getItem('ai_context') || '';
             
-            // 1. Get recent history to search through (top 100 for balance)
-            const log = await getLog(repoPath, 100);
+            // 1. Get recent history to search through (top 200 for more breadth when filtering)
+            let log = await getLog(repoPath, 200);
             
+            // Apply local filters before sending to AI if they are set
+            if (userFilter) {
+                log = log.filter(c => c.author.toLowerCase().includes(userFilter.toLowerCase()));
+            }
+            if (startDate) {
+                const sDate = new Date(startDate);
+                log = log.filter(c => new Date(c.timestamp) >= sDate);
+            }
+            if (endDate) {
+                const eDate = new Date(endDate);
+                log = log.filter(c => new Date(c.timestamp) <= eDate);
+            }
+
             // 2. Ask AI to find relevant IDs
             const relevantIds = await semanticSearch(pattern, log, apiKey, model, context);
             
@@ -171,7 +214,7 @@ export default function GrepSearchDialog({ open, onOpenChange, repoPath, onCommi
 
     return (
         <Dialog open={open} onOpenChange={onOpenChange}>
-            <DialogContent className="max-w-3xl h-[650px] flex flex-col p-0 overflow-hidden bg-background border-primary/20 shadow-2xl">
+            <DialogContent className="max-w-3xl h-[700px] flex flex-col p-0 overflow-hidden bg-background border-primary/20 shadow-2xl">
                 <div className="p-6 border-b bg-muted/5 flex items-center justify-between">
                     <div>
                         <DialogTitle className="text-xl font-bold flex items-center gap-2">
@@ -198,25 +241,73 @@ export default function GrepSearchDialog({ open, onOpenChange, repoPath, onCommi
                             </TabsTrigger>
                         </TabsList>
 
-                        <div className="flex gap-2 mb-6">
-                            <div className="relative flex-1 group">
-                                <Search className="absolute left-3 top-3 h-4 w-4 text-muted-foreground group-focus-within:text-primary transition-colors" />
-                                <Input 
-                                    placeholder={searchMode === 'grep' ? "Regex or string (e.g. functionName)..." : searchMode === 'indexed' ? "Keywords (instant search)..." : "Describe what you're looking for..."} 
-                                    className="pl-10 h-11 border-muted-foreground/20 focus:border-primary/50 transition-all"
-                                    value={pattern}
-                                    onChange={e => setPattern(e.target.value)}
-                                    onKeyDown={e => e.key === 'Enter' && handleSearch()}
-                                />
-                            </div>
-                            <Button onClick={handleSearch} disabled={loading || !pattern} size="lg" className="h-11 px-6 font-bold shadow-lg shadow-primary/20">
-                                {loading ? <Loader2 className="animate-spin h-4 w-4" /> : 'Search'}
-                            </Button>
-                            {searchMode === 'indexed' && (
-                                <Button variant="outline" onClick={handleRebuild} disabled={isIndexing} size="lg" className="h-11 px-4 gap-2 border-primary/20 hover:bg-primary/5">
-                                    <RefreshCw className={`h-4 w-4 ${isIndexing ? 'animate-spin' : ''}`} />
-                                    {isIndexing ? 'Indexing...' : 'Rebuild'}
+                        <div className="space-y-3 mb-6">
+                            <div className="flex gap-2">
+                                <div className="relative flex-1 group">
+                                    <Search className="absolute left-3 top-3 h-4 w-4 text-muted-foreground group-focus-within:text-primary transition-colors" />
+                                    <Input 
+                                        placeholder={searchMode === 'grep' ? "Regex or string (e.g. functionName)..." : searchMode === 'indexed' ? "Keywords (instant search)..." : "Describe what you're looking for..."} 
+                                        className="pl-10 h-11 border-muted-foreground/20 focus:border-primary/50 transition-all"
+                                        value={pattern}
+                                        onChange={e => setPattern(e.target.value)}
+                                        onKeyDown={e => e.key === 'Enter' && handleSearch()}
+                                    />
+                                </div>
+                                <Button 
+                                    variant={showFilters ? 'secondary' : 'outline'}
+                                    onClick={() => setShowFilters(!showFilters)}
+                                    className="h-11 px-3"
+                                    title="Toggle Filters"
+                                >
+                                    <Calendar className="h-4 w-4" />
                                 </Button>
+                                <Button onClick={handleSearch} disabled={loading || !pattern} size="lg" className="h-11 px-6 font-bold shadow-lg shadow-primary/20">
+                                    {loading ? <Loader2 className="animate-spin h-4 w-4" /> : 'Search'}
+                                </Button>
+                                {searchMode === 'indexed' && (
+                                    <Button variant="outline" onClick={handleRebuild} disabled={isIndexing} size="lg" className="h-11 px-4 gap-2 border-primary/20 hover:bg-primary/5">
+                                        <RefreshCw className={`h-4 w-4 ${isIndexing ? 'animate-spin' : ''}`} />
+                                        {isIndexing ? 'Indexing...' : 'Rebuild'}
+                                    </Button>
+                                )}
+                            </div>
+
+                            {showFilters && (
+                                <div className="grid grid-cols-3 gap-3 p-3 bg-muted/30 rounded-lg border border-dashed border-muted-foreground/20 animate-in fade-in slide-in-from-top-2 duration-200">
+                                    <div className="space-y-1">
+                                        <label className="text-[10px] font-bold uppercase text-muted-foreground flex items-center gap-1">
+                                            <User className="h-3 w-3" /> Author
+                                        </label>
+                                        <Input 
+                                            placeholder="User name..." 
+                                            className="h-8 text-xs" 
+                                            value={userFilter}
+                                            onChange={e => setUserFilter(e.target.value)}
+                                        />
+                                    </div>
+                                    <div className="space-y-1">
+                                        <label className="text-[10px] font-bold uppercase text-muted-foreground flex items-center gap-1">
+                                            <Calendar className="h-3 w-3" /> Start Date
+                                        </label>
+                                        <Input 
+                                            type="date" 
+                                            className="h-8 text-xs" 
+                                            value={startDate}
+                                            onChange={e => setStartDate(e.target.value)}
+                                        />
+                                    </div>
+                                    <div className="space-y-1">
+                                        <label className="text-[10px] font-bold uppercase text-muted-foreground flex items-center gap-1">
+                                            <Calendar className="h-3 w-3" /> End Date
+                                        </label>
+                                        <Input 
+                                            type="date" 
+                                            className="h-8 text-xs" 
+                                            value={endDate}
+                                            onChange={e => setEndDate(e.target.value)}
+                                        />
+                                    </div>
+                                </div>
                             )}
                         </div>
                     </div>
