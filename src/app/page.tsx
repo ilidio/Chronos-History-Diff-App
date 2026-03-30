@@ -363,16 +363,18 @@ export default function Home() {
     }
   };
 
-  const onSnapshotClick = async (snapshot: Snapshot) => {
+  const onSnapshotClick = async (snapshot: Snapshot, filePathOverride?: string) => {
     setSelectedSnapshot(snapshot);
     setSelectedCommit(null);
     
+    const targetFile = filePathOverride || snapshot.filePath || selectedFile;
+    
     // Ensure we switch to the file if it's different
-    if (snapshot.filePath && snapshot.filePath !== selectedFile) {
-        setSelectedFile(snapshot.filePath);
+    if (targetFile && targetFile !== selectedFile) {
+        setSelectedFile(targetFile);
+        setIsMaximized(true);
     }
     
-    const targetFile = snapshot.filePath || selectedFile;
     if (!repoPath || !targetFile) return;
 
     setLoading(true);
@@ -423,19 +425,26 @@ export default function Home() {
     }
   };
 
-  const onCommitClick = async (commit: any) => {
+  const onCommitClick = async (commit: any, filePathOverride?: string) => {
     setSelectedCommit(commit);
     setSelectedSnapshot(null);
-    if (!repoPath || !selectedFile) return;
+    
+    const targetFile = filePathOverride || selectedFile;
+    if (targetFile && targetFile !== selectedFile) {
+        setSelectedFile(targetFile);
+        setIsMaximized(true);
+    }
+
+    if (!repoPath || !targetFile) return;
 
     setLoading(true);
     setModifiedContent(null);
     try {
        // Normalize paths for reliable stripping on Windows (handling casing and slashes)
-       const normSelected = selectedFile.replace(/\\/g, '/').toLowerCase();
+       const normSelected = targetFile.replace(/\\/g, '/').toLowerCase();
        const normRepo = repoPath.replace(/\\/g, '/').toLowerCase();
        
-       let relativePath = selectedFile.replace(/\\/g, '/');
+       let relativePath = targetFile.replace(/\\/g, '/');
        if (normSelected.startsWith(normRepo)) {
            relativePath = relativePath.substring(normRepo.length);
            if (relativePath.startsWith('/')) {
@@ -1140,12 +1149,23 @@ export default function Home() {
         onOpenChange={setGrepOpen}
         repoPath={repoPath}
         onCommitSelect={async (item) => {
+          let targetFile = selectedFile || '';
+          if (item.type === 'snapshot' && item.filePath) {
+              targetFile = item.filePath;
+          } else if (item.type === 'git' && item.files?.[0]) {
+              targetFile = item.files[0];
+          }
+
+          if (targetFile && targetFile !== selectedFile) {
+              await onFileClick(targetFile);
+          }
+
           if (item.type === 'snapshot') {
             setHistoryMode('local');
-            onSnapshotClick(item);
+            onSnapshotClick(item, targetFile);
           } else {
             setHistoryMode('git');
-            onCommitClick(item);
+            onCommitClick(item, targetFile);
           }
         }}
         onFileSelect={(filePath) => {
