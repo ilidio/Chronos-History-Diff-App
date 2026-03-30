@@ -7,7 +7,7 @@ import { Input } from '@/components/ui/input';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { grepHistory, semanticSearch, getLog, rebuildIndex, indexedSearch, getSearchSnippet } from '@/lib/electron';
-import { Search, Loader2, Calendar, User, Hash, Sparkles, RefreshCw, FileText, History } from 'lucide-react';
+import { Search, Loader2, Calendar, User, Hash, Sparkles, RefreshCw, FileText, History, Maximize2, Minimize2 } from 'lucide-react';
 
 interface GrepSearchDialogProps {
     open: boolean;
@@ -30,6 +30,7 @@ export default function GrepSearchDialog({ open, onOpenChange, repoPath, onCommi
     const [selectedId, setSelectedId] = useState<string | null>(null);
     const [previewContent, setPreviewContent] = useState<string | null>(null);
     const [previewLoading, setPreviewLoading] = useState(false);
+    const [isMaximized, setIsMaximized] = useState(false);
 
     const handleSearch = async () => {
         if (!pattern || !repoPath) return;
@@ -238,7 +239,7 @@ export default function GrepSearchDialog({ open, onOpenChange, repoPath, onCommi
 
     return (
         <Dialog open={open} onOpenChange={onOpenChange}>
-            <DialogContent className="max-w-5xl h-[750px] flex flex-col p-0 overflow-hidden bg-background border-primary/20 shadow-2xl">
+            <DialogContent className={`${isMaximized ? 'max-w-[98vw] h-[98vh]' : 'max-w-5xl h-[750px]'} flex flex-col p-0 overflow-hidden bg-background border-primary/20 shadow-2xl transition-all duration-300 ease-in-out`}>
                 <div className="p-6 border-b bg-muted/5 flex items-center justify-between">
                     <div>
                         <DialogTitle className="text-xl font-bold flex items-center gap-2">
@@ -249,6 +250,15 @@ export default function GrepSearchDialog({ open, onOpenChange, repoPath, onCommi
                             Find relevant versions using patterns or AI intent. Single-click to preview, double-click to open.
                         </DialogDescription>
                     </div>
+                    <Button 
+                        variant="ghost" 
+                        size="sm" 
+                        className="h-8 w-8 p-0 hover:bg-primary/10 text-muted-foreground hover:text-primary transition-colors"
+                        onClick={() => setIsMaximized(!isMaximized)}
+                        title={isMaximized ? "Restore Size" : "Maximize"}
+                    >
+                        {isMaximized ? <Minimize2 className="h-4 w-4" /> : <Maximize2 className="h-4 w-4" />}
+                    </Button>
                 </div>
 
                 <div className="flex-1 flex flex-col min-h-0">
