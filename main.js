@@ -334,22 +334,71 @@ async function getChronosSetting(repoPath, settingName, defaultValue) {
     return defaultValue;
 }
 
+function generateProjectHash(p) {
+    // Simple fast string hashing for folder names (matches VS Code extension)
+    let hash = 0;
+    for (let i = 0; i < p.length; i++) {
+        const char = p.charCodeAt(i);
+        hash = ((hash << 5) - hash) + char;
+        hash = hash & hash; // Convert to 32bit integer
+    }
+    return Math.abs(hash).toString(16).substring(0, 8);
+}
+
+function getGlobalHistoryRoot() {
+    const isWin = process.platform === 'win32';
+    if (isWin) {
+        // C:\Users\#USER_NAME#\AppData\Local\.chronos-history
+        return path.join(process.env.LOCALAPPDATA || path.join(app.getPath('home'), 'AppData', 'Local'), '.chronos-history');
+    }
+    // ~/.chronos-history
+    return path.join(app.getPath('home'), '.chronos-history');
+}
+
 async function findChronosHistoryDir(repoPath) {
     console.log(`[Storage] Searching history for: ${repoPath}`);
     
+    // 1. Check if saveInProjectFolder is enabled or if .history exists locally
     const saveInProject = await getChronosSetting(repoPath, 'saveInProjectFolder', false);
     console.log(`[Storage] chronos.saveInProjectFolder is: ${saveInProject}`);
 
-    if (saveInProject) {
-        // Prefer local .history folder
-        const localHistory = path.join(repoPath, '.history');
-        if (fs.existsSync(localHistory) && fs.existsSync(path.join(localHistory, 'index.json'))) {
-            console.log(`[Storage] Found local history at: ${localHistory}`);
-            return localHistory;
+    const localHistory = path.join(repoPath, '.history');
+    if (fs.existsSync(localHistory) && fs.existsSync(path.join(localHistory, 'index.json'))) {
+        console.log(`[Storage] Found local history at: ${localHistory}`);
+        return localHistory;
+    }
+
+    // 2. Check Global Shared Storage (~/.chronos-history or AppData/Local/.chronos-history)
+    const globalRoot = getGlobalHistoryRoot();
+    const projectHash = generateProjectHash(repoPath);
+    const projectName = path.basename(repoPath);
+    const sharedHistoryPath = path.join(globalRoot, `${projectName}-${projectHash}`);
+
+    if (fs.existsSync(sharedHistoryPath) && fs.existsSync(path.join(sharedHistoryPath, 'index.json'))) {
+        console.log(`[Storage] Found shared history at: ${sharedHistoryPath}`);
+        return sharedHistoryPath;
+    }
+
+    // 3. Try custom storage path from settings
+    const customPath = await getChronosSetting(repoPath, 'customStoragePath', '');
+    if (customPath) {
+        let resolvedPath = customPath;
+        if (customPath.startsWith('~')) {
+            resolvedPath = path.join(app.getPath('home'), customPath.slice(1));
+        }
+        const customHistoryPath = path.isAbsolute(resolvedPath) ? resolvedPath : path.join(repoPath, resolvedPath);
+        // If it's a global custom path, we should also check for the project-specific subfolder
+        const projectSpecificCustom = path.join(customHistoryPath, `${projectName}-${projectHash}`);
+        
+        if (fs.existsSync(projectSpecificCustom) && fs.existsSync(path.join(projectSpecificCustom, 'index.json'))) {
+            return projectSpecificCustom;
+        }
+        if (fs.existsSync(customHistoryPath) && fs.existsSync(path.join(customHistoryPath, 'index.json'))) {
+            return customHistoryPath;
         }
     }
 
-    // Try VS Code workspaceStorage
+    // 4. Try VS Code workspaceStorage (Legacy fallback)
     const isMac = process.platform === 'darwin';
     const appData = isMac 
         ? path.join(app.getPath('home'), 'Library/Application Support/Code/User/workspaceStorage')
@@ -389,15 +438,6 @@ async function findChronosHistoryDir(repoPath) {
             }
         } catch (e) {
             console.error("[Storage] Error searching workspaceStorage:", e);
-        }
-    }
-
-    // Fallback to local .history if not found in workspaceStorage and not already tried
-    if (!saveInProject) {
-        const localHistory = path.join(repoPath, '.history');
-        if (fs.existsSync(localHistory) && fs.existsSync(path.join(localHistory, 'index.json'))) {
-            console.log(`[Storage] Fallback: Found local history at: ${localHistory}`);
-            return localHistory;
         }
     }
 
