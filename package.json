@@ -24,7 +24,8 @@
       {
         "provider": "github",
         "owner": "ilidio",
-        "repo": "Chronos-History-Diff-App"
+        "repo": "Chronos-History-Diff-App",
+        "releaseType": "release"
       }
     ],
     "directories": {
