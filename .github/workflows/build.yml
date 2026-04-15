@@ -40,7 +40,7 @@ jobs:
       - name: Build and Package
         # Note: electron-builder will detect the OS and build accordingly.
         # It needs GITHUB_TOKEN to create a release if a tag is pushed.
-        run: npm run dist
+        run: npm run dist -- --publish always
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           NODE_OPTIONS: "--max-old-space-size=4096"

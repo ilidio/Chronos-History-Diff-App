@@ -524,17 +524,17 @@ app.whenReady().then(async () => {
   });
 
   ipcMain.handle('git:fileHistory', async (_, { repoPath, filePath }) => {
-      // Format: commitHash|authorName|authorDate|subject
-      const command = `git log --follow --pretty=format:"%H|%an|%ad|%s" --date=iso -- "${filePath}"`;
-      return await runGit(command, repoPath);
+      // Robust git log -p --follow to catch renames and include patches
+      const command = `git log -p --follow --pretty=format:"COMMIT|%H|%an|%ad|%s" --date=iso -- "${filePath}"`;
+      return await runGit(command, repoPath, { trim: false });
   });
 
   ipcMain.handle('git:log', async (_, { repoPath, count, filePath }) => {
-      let command = `git log -n ${count || 50} --pretty=format:"%H|%an|%ad|%s" --date=iso`;
+      let command = `git log -n ${count || 50} -p --pretty=format:"COMMIT|%H|%an|%ad|%s" --date=iso`;
       if (filePath) {
-          command += ` -- "${filePath}"`;
+          command += ` --follow -- "${filePath}"`;
       }
-      return await runGit(command, repoPath);
+      return await runGit(command, repoPath, { trim: false });
   });
 
   ipcMain.handle('git:show', async (_, { repoPath, ref, filePath }) => {

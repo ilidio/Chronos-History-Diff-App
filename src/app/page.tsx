@@ -349,14 +349,8 @@ export default function Home() {
                 }
             }
             console.log(`[onFileClick] Loading history for: ${relativePath} in repo: ${activeRepoPath}`);
-            const output = await getFileHistory(activeRepoPath, relativePath);
-            const parsed = output.split('\n')
-                .filter((l: string) => l.includes('|'))
-                .map((line: string) => {
-                    const [id, author, date, message] = line.split('|');
-                    return { id, author, date, message };
-                });
-            setGitHistory(parsed);
+            const commits = await getFileHistory(activeRepoPath, relativePath);
+            setGitHistory(commits);
         } catch (e) {
             console.error("Failed to load git history:", e);
         }
@@ -452,26 +446,27 @@ export default function Home() {
            }
        }
 
+       const useOldPath = commit.oldPath || relativePath;
+       const useNewPath = commit.newPath || relativePath;
+
        if (pinnedVersion) {
-           console.log(`Comparing Pin: ${pinnedVersion.ref} VS Git Commit: ${commit.id}`);
+           console.log(`Comparing Pin: ${pinnedVersion.ref} VS Git Commit: ${commit.id} at path ${useNewPath}`);
            const result = await compareFiles(
                repoPath,
                pinnedVersion.type === 'git' ? relativePath : pinnedVersion.ref, 
                pinnedVersion.type === 'git' ? pinnedVersion.ref : null,
-               relativePath, commit.id
+               useNewPath, commit.id
            );
            setDiffData(result);
        } else {
            // Default: Compare commit with its parent (Commit N vs Commit N-1)
-           // Use ~1 instead of ^ for Windows compatibility (carets are shell escape chars)
-           console.log(`Comparing Git Commit: ${commit.id} VS its Parent`);
+           console.log(`Comparing Git Commit: ${commit.id} (at ${useNewPath}) VS its Parent (at ${useOldPath})`);
            const result = await compareFiles(
                repoPath,
-               relativePath, `${commit.id}~1`,
-               relativePath, commit.id
+               useOldPath, `${commit.id}~1`,
+               useNewPath, commit.id
            );
            setDiffData(result);
-           // Content from git commits is read-only by default in the app logic
        }
     } catch (e: any) {
         console.error("Git Diff Error:", e);

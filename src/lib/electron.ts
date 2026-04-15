@@ -181,19 +181,72 @@ function parseBlamePorcelain(output: string): any[] {
     return result.sort((a, b) => a.line - b.line);
 }
 
-export async function getFileHistory(repoPath: string, filePath: string): Promise<string> {
-    return safeInvoke('git:fileHistory', { repoPath, filePath });
+export async function getFileHistory(repoPath: string, filePath: string): Promise<any[]> {
+    const output = await safeInvoke('git:fileHistory', { repoPath, filePath });
+    if (!output) return [];
+    
+    const commits: any[] = [];
+    const lines = output.split('\n');
+    let currentCommit: any = null;
+    let captureDiff = false;
+
+    for (const line of lines) {
+        if (line.startsWith('COMMIT|')) {
+            if (currentCommit) commits.push(currentCommit);
+            const [_, id, author, date, message] = line.split('|');
+            currentCommit = { id, author, date, message, timestamp: new Date(date).getTime(), diff: '', oldPath: '', newPath: '' };
+            captureDiff = false;
+        } else if (currentCommit) {
+            if (line.startsWith('diff --git')) {
+                captureDiff = true;
+                currentCommit.diff += line + '\n';
+                // Parse: diff --git a/old_path b/new_path
+                const match = line.match(/diff --git a\/(.*) b\/(.*)/);
+                if (match) {
+                    currentCommit.oldPath = match[1];
+                    currentCommit.newPath = match[2];
+                }
+            } else if (captureDiff) {
+                currentCommit.diff += line + '\n';
+            }
+        }
+    }
+    if (currentCommit) commits.push(currentCommit);
+    return commits;
 }
 
 export async function getLog(repoPath: string, count = 50, filePath?: string): Promise<any[]> {
     const output = await safeInvoke('git:log', { repoPath, count, filePath });
     if (!output) return [];
-    return output.split('\n')
-        .filter((l: string) => l.includes('|'))
-        .map((line: string) => {
-            const [id, author, timestamp, message] = line.split('|');
-            return { id, author, timestamp, message };
-        });
+    
+    const commits: any[] = [];
+    const lines = output.split('\n');
+    let currentCommit: any = null;
+    let captureDiff = false;
+
+    for (const line of lines) {
+        if (line.startsWith('COMMIT|')) {
+            if (currentCommit) commits.push(currentCommit);
+            const [_, id, author, date, message] = line.split('|');
+            currentCommit = { id, author, date, message, timestamp: new Date(date).getTime(), diff: '', oldPath: '', newPath: '' };
+            captureDiff = false;
+        } else if (currentCommit) {
+            if (line.startsWith('diff --git')) {
+                captureDiff = true;
+                currentCommit.diff += line + '\n';
+                // Parse: diff --git a/old_path b/new_path
+                const match = line.match(/diff --git a\/(.*) b\/(.*)/);
+                if (match) {
+                    currentCommit.oldPath = match[1];
+                    currentCommit.newPath = match[2];
+                }
+            } else if (captureDiff) {
+                currentCommit.diff += line + '\n';
+            }
+        }
+    }
+    if (currentCommit) commits.push(currentCommit);
+    return commits;
 }
 
 export async function getRepoStatus(repoPath: string): Promise<any> {

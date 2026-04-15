@@ -49,62 +49,74 @@ export default function ChronosHistoryList({ snapshots, selectedSnapshotId, pinn
     );
   }
 
-  // Group by date? For now just flat list
-  
   return (
-    <div className="space-y-1 p-2">
-      {snapshots.map((snapshot) => (
-        <div
-          key={snapshot.id}
-          className={`flex flex-col p-2 rounded cursor-pointer text-sm border transition-colors group relative ${
-            selectedSnapshotId === snapshot.id 
-              ? 'bg-primary/10 border-primary/20' 
-              : pinnedId === snapshot.id
-              ? 'bg-orange-500/10 border-orange-500/20'
-              : 'hover:bg-muted border-transparent hover:border-border'
-          }`}
-          onClick={() => onSnapshotClick(snapshot)}
-        >
-          <div className="flex items-center justify-between mb-1">
-            <div className="flex items-center gap-2 font-medium truncate pr-6">
-                <span className={`p-1 rounded-full ${pinnedId === snapshot.id ? 'bg-orange-500/20 text-orange-500' : 'bg-muted/50 text-muted-foreground'}`}>
-                    {getEventIcon(snapshot.eventType)}
-                </span>
-                <span className="truncate" title={snapshot.label || snapshot.eventType}>
-                    {snapshot.label || (snapshot.eventType === 'save' ? 'Auto Save' : snapshot.eventType)}
-                </span>
-            </div>
-            <span className="text-[10px] text-muted-foreground flex-shrink-0 whitespace-nowrap ml-2 group-hover:hidden">
-                {formatDate(snapshot.timestamp)}
-            </span>
-            
-            <button 
-                className={`absolute right-2 top-2 p-1 rounded hover:bg-muted opacity-0 group-hover:opacity-100 transition-opacity ${pinnedId === snapshot.id ? 'text-orange-500 opacity-100' : 'text-muted-foreground'}`}
-                onClick={(e) => {
-                    e.stopPropagation();
-                    onPinClick(snapshot);
-                }}
-                title={pinnedId === snapshot.id ? "Unpin Base Version" : "Pin as Base Version for Comparison"}
-            >
-                {pinnedId === snapshot.id ? <PinOff className="h-3 w-3" /> : <Pin className="h-3 w-3" />}
-            </button>
-          </div>
-          
-          {(snapshot.description) && (
-             <div className="text-xs text-muted-foreground truncate pl-7" title={snapshot.description}>
-                {snapshot.description}
-             </div>
-          )}
-
-          {/* Stats if available */}
-          {(snapshot.linesAdded !== undefined || snapshot.linesDeleted !== undefined) && (
-              <div className="flex gap-2 text-[10px] pl-7 mt-1 opacity-70">
-                  {snapshot.linesAdded ? <span className="text-green-500">+{snapshot.linesAdded}</span> : null}
-                  {snapshot.linesDeleted ? <span className="text-red-500">-{snapshot.linesDeleted}</span> : null}
-              </div>
-          )}
+    <div className="h-full flex flex-col overflow-hidden">
+        <table className="w-full text-left border-collapse table-fixed">
+            <thead>
+                <tr className="bg-muted/50 text-[10px] uppercase tracking-wider text-muted-foreground border-b border-border">
+                    <th className="px-3 py-2 font-semibold w-[100px]">Time</th>
+                    <th className="px-3 py-2 font-semibold w-[80px]">Type</th>
+                    <th className="px-3 py-2 font-semibold">Description</th>
+                </tr>
+            </thead>
+        </table>
+        <div className="flex-1 overflow-y-auto">
+            <table className="w-full text-left border-collapse table-fixed">
+                <tbody className="text-xs">
+                    {snapshots.map((snapshot) => (
+                        <tr
+                            key={snapshot.id}
+                            className={`group cursor-pointer border-b border-border/50 transition-colors ${
+                                selectedSnapshotId === snapshot.id 
+                                    ? 'bg-primary/10' 
+                                    : pinnedId === snapshot.id
+                                    ? 'bg-orange-500/10'
+                                    : 'hover:bg-muted/50'
+                            }`}
+                            onClick={() => onSnapshotClick(snapshot)}
+                        >
+                            <td className="px-3 py-2 whitespace-nowrap text-muted-foreground w-[100px]">
+                                {formatDate(snapshot.timestamp)}
+                            </td>
+                            <td className="px-3 py-2 w-[80px]">
+                                <div className="flex items-center gap-1.5">
+                                    <span className={pinnedId === snapshot.id ? 'text-orange-500' : 'text-muted-foreground'}>
+                                        {getEventIcon(snapshot.eventType)}
+                                    </span>
+                                    <span className="capitalize opacity-80">{snapshot.eventType}</span>
+                                </div>
+                            </td>
+                            <td className="px-3 py-2 relative overflow-hidden">
+                                <div className="flex items-center justify-between gap-2">
+                                    <span className="truncate block font-medium" title={snapshot.label || snapshot.description || ''}>
+                                        {snapshot.label || snapshot.description || (snapshot.eventType === 'save' ? 'Auto Save' : '-')}
+                                    </span>
+                                    
+                                    <div className="flex items-center gap-2 flex-shrink-0">
+                                        {(snapshot.linesAdded !== undefined || snapshot.linesDeleted !== undefined) && (
+                                            <div className="flex gap-1.5 text-[10px] opacity-70">
+                                                {snapshot.linesAdded ? <span className="text-green-500">+{snapshot.linesAdded}</span> : null}
+                                                {snapshot.linesDeleted ? <span className="text-red-500">-{snapshot.linesDeleted}</span> : null}
+                                            </div>
+                                        )}
+                                        <button 
+                                            className={`p-1 rounded hover:bg-muted opacity-0 group-hover:opacity-100 transition-opacity ${pinnedId === snapshot.id ? 'text-orange-500 opacity-100' : 'text-muted-foreground'}`}
+                                            onClick={(e) => {
+                                                e.stopPropagation();
+                                                onPinClick(snapshot);
+                                            }}
+                                            title={pinnedId === snapshot.id ? "Unpin Base Version" : "Pin as Base Version for Comparison"}
+                                        >
+                                            {pinnedId === snapshot.id ? <PinOff className="h-3 w-3" /> : <Pin className="h-3 w-3" />}
+                                        </button>
+                                    </div>
+                                </div>
+                            </td>
+                        </tr>
+                    ))}
+                </tbody>
+            </table>
         </div>
-      ))}
     </div>
   );
 }
