@@ -134,12 +134,8 @@ export default function CompareFilesDialog({ open, onOpenChange, repoPath, initi
         if (!repoPath) return;
         try {
             const relPath = getRelativePath(filePath);
-            const output = await getFileHistory(repoPath, relPath);
-            const parsed = output.split('\n').filter((l: string) => l.includes('|')).map((line: string) => {
-                const [id, author, date, message] = line.split('|');
-                return { id, author, date, message };
-            });
-            setGitHistory(parsed);
+            const commits = await getFileHistory(repoPath, relPath);
+            setGitHistory(commits);
         } catch (e) { console.error(e); }
     };
 
