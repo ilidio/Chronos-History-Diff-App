@@ -101,7 +101,7 @@ export default function FileHistoryDialog({ open, onOpenChange, repoPath, filePa
                                 <div className="flex-1 overflow-auto p-0 bg-[#0d1117] text-gray-300 font-mono text-[11px] leading-relaxed">
                                     {selectedCommit.diff ? (
                                         <div className="p-2 space-y-0.5">
-                                            {selectedCommit.diff.split('\\n').map((line, i) => {
+                                            {selectedCommit.diff.split('\n').map((line: string, i: number) => {
                                                 let color = '';
                                                 let bg = '';
                                                 if (line.startsWith('+')) { color = 'text-green-400'; bg = 'bg-green-900/20'; }
