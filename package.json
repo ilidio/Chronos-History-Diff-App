@@ -1,7 +1,7 @@
 {
   "name": "chronos-history-diff-app",
   "productName": "ChronosHistoryDiff",
-  "version": "0.1.11",
+  "version": "0.1.12",
   "description": "A diff application compatible with Chronos History VS Code extension, built with a GitForge-like feel.",
   "author": "Ilídio Martins <ilidio.martins@gmail.com>",
   "homepage": "",
@@ -49,8 +49,20 @@
     },
     "win": {
       "target": [
-        "nsis",
-        "portable"
+        {
+          "target": "nsis",
+          "arch": [
+            "x64",
+            "arm64"
+          ]
+        },
+        {
+          "target": "portable",
+          "arch": [
+            "x64",
+            "arm64"
+          ]
+        }
       ],
       "icon": "public/logo.png"
     },
@@ -58,7 +70,10 @@
       "oneClick": false,
       "allowToChangeInstallationDirectory": true,
       "shortcutName": "ChronosHistoryDiff",
-      "artifactName": "${productName}-Setup-${version}.${ext}"
+      "artifactName": "${productName}-Setup-${version}-${arch}.${ext}"
+    },
+    "portable": {
+      "artifactName": "${productName}-${version}-${arch}.${ext}"
     },
     "linux": {
       "target": [
