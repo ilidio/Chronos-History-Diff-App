@@ -1,6 +1,6 @@
 const { app, BrowserWindow, ipcMain, dialog, Menu, shell } = require('electron');
 const path = require('path');
-const { spawn, exec, execFile } = require('child_process');
+const { spawn, execFile } = require('child_process');
 const fs = require('fs');
 const glob = require('glob');
 const minimatch = require('minimatch');
@@ -515,34 +515,45 @@ app.whenReady().then(async () => {
           fs.writeFileSync(fileA, original);
           fs.writeFileSync(fileB, modified);
 
-          let command = '';
-          // Simple mapping for common tools
+          // Map each tool to a fixed executable + argument array. Using spawn without a
+          // shell means the file paths are passed as literal args (no quoting/injection),
+          // and avoids the previously-malformed Windows `start "" ...` invocation.
+          let cmd = null;
+          let args = [];
           switch (tool) {
               case 'vscode':
-                  command = `code --diff "${fileA}" "${fileB}"`;
+                  cmd = 'code'; args = ['--diff', fileA, fileB];
                   break;
               case 'kdiff3':
-                  command = `kdiff3 "${fileA}" "${fileB}"`;
+                  cmd = 'kdiff3'; args = [fileA, fileB];
                   break;
               case 'meld':
-                  command = `meld "${fileA}" "${fileB}"`;
+                  cmd = 'meld'; args = [fileA, fileB];
                   break;
               case 'bc3':
               case 'bc4':
-                  command = `bcomp "${fileA}" "${fileB}"`;
+                  cmd = 'bcomp'; args = [fileA, fileB];
                   break;
               default:
-                  // Fallback to system default or just open the files?
-                  // Better: if no tool, try 'git difftool' if possible, or just fail.
-                  if (process.platform === 'darwin') command = `open -a "Beyond Compare" "${fileA}" "${fileB}"`;
-                  else if (process.platform === 'win32') command = `start "" "Beyond Compare" "${fileA}" "${fileB}"`;
+                  // Default to Beyond Compare.
+                  if (process.platform === 'darwin') { cmd = 'open'; args = ['-a', 'Beyond Compare', fileA, fileB]; }
+                  else { cmd = 'bcomp'; args = [fileA, fileB]; }
                   break;
           }
 
-          if (command) {
-              exec(command, (err) => {
-                  if (err) console.error("External diff tool error:", err);
+          if (cmd) {
+              // On Windows, `code`/`bcomp` resolve to .cmd/.exe that Node requires a shell
+              // to launch; quote each arg so temp paths containing spaces survive the shell.
+              // On macOS/Linux we spawn without a shell, so args are passed literally.
+              const useShell = process.platform === 'win32';
+              const finalArgs = useShell ? args.map(a => `"${a}"`) : args;
+              const child = spawn(cmd, finalArgs, {
+                  detached: true,
+                  stdio: 'ignore',
+                  shell: useShell
               });
+              child.on('error', (err) => console.error('External diff tool error:', err));
+              child.unref();
           }
           return { success: true };
       } catch (e) {

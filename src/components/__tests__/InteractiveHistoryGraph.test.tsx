@@ -5,7 +5,7 @@ import React from 'react';
 
 // Mock Gitgraph
 vi.mock('@gitgraph/react', () => ({
-  Gitgraph: ({ children }: { children: (gitgraph: any) => void }) => {
+  Gitgraph: ({ children }: { children: (gitgraph: any) => React.ReactNode }) => {
     const gitgraph = {
       branch: vi.fn().mockReturnValue({
         commit: vi.fn(),
