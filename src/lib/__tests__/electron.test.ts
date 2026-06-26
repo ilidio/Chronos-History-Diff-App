@@ -9,18 +9,21 @@ describe('electron lib wrappers', () => {
   });
 
   it('getLog invokes git:log and parses output', async () => {
-    ipcRenderer.invoke.mockResolvedValue('SHA1|Author1|Date1|Msg1\nSHA2|Author2|Date2|Msg2');
-    
+    // getLog expects each commit header line to start with the COMMIT| prefix
+    // (so it can be interleaved with `-p` patch output).
+    ipcRenderer.invoke.mockResolvedValue('COMMIT|SHA1|Author1|2023-01-01|Msg1\nCOMMIT|SHA2|Author2|2023-01-02|Msg2');
+
     const log = await electron.getLog('/path', 10, 'file.txt');
-    
+
     expect(ipcRenderer.invoke).toHaveBeenCalledWith('git:log', { repoPath: '/path', count: 10, filePath: 'file.txt' });
     expect(log).toHaveLength(2);
-    expect(log[0]).toEqual({
+    expect(log[0]).toMatchObject({
       id: 'SHA1',
       author: 'Author1',
-      timestamp: 'Date1',
+      date: '2023-01-01',
       message: 'Msg1'
     });
+    expect(log[1]).toMatchObject({ id: 'SHA2', message: 'Msg2' });
   });
 
   it('getRepoStatus invokes git:status and parses porcelain output', async () => {

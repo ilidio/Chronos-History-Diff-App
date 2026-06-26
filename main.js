@@ -1,6 +1,6 @@
 const { app, BrowserWindow, ipcMain, dialog, Menu, shell } = require('electron');
 const path = require('path');
-const { spawn, exec } = require('child_process');
+const { spawn, exec, execFile } = require('child_process');
 const fs = require('fs');
 const glob = require('glob');
 const minimatch = require('minimatch');
@@ -191,20 +191,31 @@ function createMenu(recentPaths = [], recentFiles = []) {
     Menu.setApplicationMenu(menu);
 }
 
-function runGit(command, repoPath, options = { trim: true }) {
+// Runs git with an explicit argument array via execFile (no shell), so repo- and
+// user-controlled values (refs, paths, search patterns, branch names) can never be
+// interpreted as shell syntax. Always pass `args` as an array of strings.
+function runGit(args, repoPath, options = { trim: true }) {
   const normalizedPath = path.normalize(repoPath);
-  console.log(`[runGit] Executing: ${command} in ${normalizedPath}`);
-  
+  if (!Array.isArray(args)) {
+      return Promise.reject(new Error('runGit: args must be an array of strings'));
+  }
+  console.log(`[runGit] git ${args.join(' ')} in ${normalizedPath}`);
+
   return new Promise((resolve, reject) => {
-      exec(command, { 
-          cwd: normalizedPath, 
-          maxBuffer: 1024 * 1024 * 10 
+      execFile('git', args, {
+          cwd: normalizedPath,
+          maxBuffer: 1024 * 1024 * 10,
+          windowsHide: true
       }, (error, stdout, stderr) => {
           if (error) {
               console.error(`[runGit] Error: ${error.message}`);
               if (stderr) console.error(`[runGit] Stderr: ${stderr}`);
-              const errorMessage = stderr ? stderr.trim() : error.message;
-              reject(new Error(errorMessage));
+              // Preserve stdout/stderr on the error so callers (e.g. `diff --no-index`,
+              // which exits non-zero when differences are found) can still read output.
+              const wrapped = new Error(stderr ? stderr.trim() : error.message);
+              wrapped.stdout = stdout;
+              wrapped.stderr = stderr;
+              reject(wrapped);
           } else {
               const output = options.trim ? stdout.trim() : stdout;
               resolve(output);
@@ -379,6 +390,29 @@ async function findChronosHistoryDir(repoPath) {
         return sharedHistoryPath;
     }
 
+    // 2b. Consult the workspaces.json registry written by the editor extensions.
+    // This makes discovery robust when the project folder name/hash was derived from
+    // a different root path string (e.g. the Visual Studio extension), since the
+    // registry records each project's actual rootPath -> {name, id} mapping.
+    try {
+        const registryPath = path.join(globalRoot, 'workspaces.json');
+        if (fs.existsSync(registryPath)) {
+            const registry = JSON.parse(fs.readFileSync(registryPath, 'utf8'));
+            const normalizedRepo = path.normalize(repoPath).toLowerCase();
+            const match = (registry.workspaces || []).find(w =>
+                w && w.rootPath && path.normalize(w.rootPath).toLowerCase() === normalizedRepo);
+            if (match) {
+                const registeredPath = path.join(globalRoot, `${match.name}-${match.id}`);
+                if (fs.existsSync(path.join(registeredPath, 'index.json'))) {
+                    console.log(`[Storage] Found history via registry at: ${registeredPath}`);
+                    return registeredPath;
+                }
+            }
+        }
+    } catch (e) {
+        console.error('[Storage] Failed to read workspaces.json registry:', e.message);
+    }
+
     // 3. Try custom storage path from settings
     const customPath = await getChronosSetting(repoPath, 'customStoragePath', '');
     if (customPath) {
@@ -519,41 +553,36 @@ app.whenReady().then(async () => {
   });
 
   ipcMain.handle('git:blame', async (_, { repoPath, filePath }) => {
-      const command = `git blame --porcelain -- "${filePath}"`;
-      return await runGit(command, repoPath, { trim: false });
+      return await runGit(['blame', '--porcelain', '--', filePath], repoPath, { trim: false });
   });
 
   ipcMain.handle('git:fileHistory', async (_, { repoPath, filePath }) => {
       // Robust git log -p --follow to catch renames and include patches
-      const command = `git log -p --follow --pretty=format:"COMMIT|%H|%an|%ad|%s" --date=iso -- "${filePath}"`;
-      return await runGit(command, repoPath, { trim: false });
+      return await runGit(['log', '-p', '--follow', '--pretty=format:COMMIT|%H|%an|%ad|%s', '--date=iso', '--', filePath], repoPath, { trim: false });
   });
 
   ipcMain.handle('git:log', async (_, { repoPath, count, filePath }) => {
-      let command = `git log -n ${count || 50} -p --pretty=format:"COMMIT|%H|%an|%ad|%s" --date=iso`;
+      const args = ['log', '-n', String(count || 50), '-p', '--pretty=format:COMMIT|%H|%an|%ad|%s', '--date=iso'];
       if (filePath) {
-          command += ` --follow -- "${filePath}"`;
+          args.push('--follow', '--', filePath);
       }
-      return await runGit(command, repoPath, { trim: false });
+      return await runGit(args, repoPath, { trim: false });
   });
 
   ipcMain.handle('git:show', async (_, { repoPath, ref, filePath }) => {
-      const command = `git show "${ref}:${filePath}"`;
-      return await runGit(command, repoPath, { trim: false });
+      return await runGit(['show', `${ref}:${filePath}`], repoPath, { trim: false });
   });
 
   ipcMain.handle('git:status', async (_, repoPath) => {
-      const command = `git status --porcelain`;
-      return await runGit(command, repoPath);
+      return await runGit(['status', '--porcelain'], repoPath);
   });
 
   ipcMain.handle('git:branches', async (_, data) => {
       const repoPath = typeof data === 'string' ? data : data.repoPath;
       const filePath = typeof data === 'object' ? data.filePath : null;
 
-      const command = `git for-each-ref --format="%(objectname)|%(refname)|%(HEAD)" refs/heads/ refs/remotes/`;
-      const output = await runGit(command, repoPath);
-      
+      const output = await runGit(['for-each-ref', '--format=%(objectname)|%(refname)|%(HEAD)', 'refs/heads/', 'refs/remotes/'], repoPath);
+
       if (!filePath) return output;
 
       // Filter branches that have changes in filePath compared to HEAD
@@ -562,7 +591,7 @@ app.whenReady().then(async () => {
           const [commitId, refName, head] = line.split('|');
           if (head === '*') return line;
           try {
-              const diff = await runGit(`git log -n 1 HEAD...${refName} -- "${filePath}"`, repoPath);
+              const diff = await runGit(['log', '-n', '1', `HEAD...${refName}`, '--', filePath], repoPath);
               return diff ? line : null;
           } catch (e) { return null; }
       }));
@@ -570,26 +599,22 @@ app.whenReady().then(async () => {
   });
 
   ipcMain.handle('git:config', async (_, repoPath) => {
-      const command = `git config --list`;
-      return await runGit(command, repoPath);
+      return await runGit(['config', '--list'], repoPath);
   });
 
   ipcMain.handle('git:setConfig', async (_, { repoPath, key, value }) => {
-      const command = `git config "${key}" "${value}"`;
-      return await runGit(command, repoPath);
+      return await runGit(['config', key, value], repoPath);
   });
 
   ipcMain.handle('git:lsFiles', async (_, repoPath) => {
-      const command = `git ls-files`;
-      return await runGit(command, repoPath);
+      return await runGit(['ls-files'], repoPath);
   });
 
   ipcMain.handle('git:commitsForDate', async (_, { repoPath, since, until }) => {
       // Get detailed commits for AI analysis
       // Format: hash|author|date|message
       // We also want to know which files were changed
-      const command = `git log --since="${since}" --until="${until}" --pretty=format:"%H|%an|%ad|%s" --name-only`;
-      const output = await runGit(command, repoPath);
+      const output = await runGit(['log', `--since=${since}`, `--until=${until}`, '--pretty=format:%H|%an|%ad|%s', '--name-only'], repoPath);
       
       const commits = [];
       const blocks = output.split('\n\n'); // Each commit is separated by a blank line when using --name-only? 
@@ -681,9 +706,9 @@ app.whenReady().then(async () => {
           
           // Stage 1: Base, Stage 2: Ours, Stage 3: Theirs
           const [base, ours, theirs] = await Promise.all([
-              runGit(`git show :1:"${normalizedPath}"`, repoPath, { trim: false }).catch(() => ''),
-              runGit(`git show :2:"${normalizedPath}"`, repoPath, { trim: false }).catch(() => ''),
-              runGit(`git show :3:"${normalizedPath}"`, repoPath, { trim: false }).catch(() => '')
+              runGit(['show', `:1:${normalizedPath}`], repoPath, { trim: false }).catch(() => ''),
+              runGit(['show', `:2:${normalizedPath}`], repoPath, { trim: false }).catch(() => ''),
+              runGit(['show', `:3:${normalizedPath}`], repoPath, { trim: false }).catch(() => '')
           ]);
 
           return { base, ours, theirs };
@@ -841,24 +866,22 @@ Summary:`;
 
   ipcMain.handle('git:selectionHistory', async (_, { repoPath, filePath, startLine, endLine }) => {
       // git log -L <start>,<end>:<file>
-      const command = `git log -L ${startLine},${endLine}:"${filePath}" --pretty=format:"%H|%an|%ad|%s" --date=iso`;
-      return await runGit(command, repoPath);
+      return await runGit(['log', '-L', `${startLine},${endLine}:${filePath}`, '--pretty=format:%H|%an|%ad|%s', '--date=iso'], repoPath);
   });
 
   ipcMain.handle('git:searchHistory', async (_, { repoPath, filePath, searchText }) => {
       // git log -S "text" <file>
-      const command = `git log -S "${searchText}" --pretty=format:"%H|%an|%ad|%s" --date=iso -- "${filePath}"`;
-      return await runGit(command, repoPath);
+      return await runGit(['log', `-S${searchText}`, '--pretty=format:%H|%an|%ad|%s', '--date=iso', '--', filePath], repoPath);
   });
 
   ipcMain.handle('git:grepHistory', async (_, { repoPath, pattern, user, since, until }) => {
       // git log -G "pattern" --name-only to see which files changed
-      let command = `git log -G "${pattern}" --pretty=format:"COMMIT|%H|%an|%ad|%s" --date=iso --name-only`;
-      if (user) command += ` --author="${user}"`;
-      if (since) command += ` --since="${since}"`;
-      if (until) command += ` --until="${until}"`;
-      
-      const output = await runGit(command, repoPath);
+      const args = ['log', `-G${pattern}`, '--pretty=format:COMMIT|%H|%an|%ad|%s', '--date=iso', '--name-only'];
+      if (user) args.push(`--author=${user}`);
+      if (since) args.push(`--since=${since}`);
+      if (until) args.push(`--until=${until}`);
+
+      const output = await runGit(args, repoPath);
       const results = [];
       const lines = output.split('\n');
       let currentCommit = null;
@@ -878,8 +901,7 @@ Summary:`;
   ipcMain.handle('git:getSearchSnippet', async (_, { repoPath, commitId, pattern, filePath }) => {
       try {
           // Use git show with -G to find the diff lines containing the pattern
-          const command = `git show -G"${pattern}" "${commitId}" -- "${filePath}"`;
-          const output = await runGit(command, repoPath, { trim: false });
+          const output = await runGit(['show', `-G${pattern}`, commitId, '--', filePath], repoPath, { trim: false });
           
           // Find the first matching line in the diff and return some context
           const lines = output.split('\n');
@@ -910,11 +932,16 @@ Summary:`;
 
       try {
           // 1. Index Current Files
-          const files = await glob.glob('**/*', { 
-              cwd: repoPath, 
+          const indexSettings = await readAppSettings();
+          const indexExcludes = indexSettings.excludes || [];
+          let files = await glob.glob('**/*', {
+              cwd: repoPath,
               nodir: true,
               ignore: ['**/.git/**', '**/.history/**', '**/node_modules/**', '**/dist/**', '**/.next/**']
           });
+          if (indexExcludes.length > 0) {
+              files = files.filter(file => !isPathExcluded(file, indexExcludes));
+          }
 
           for (const file of files) {
               try {
@@ -1064,22 +1091,22 @@ Summary:`;
   });
 
   ipcMain.handle('git:diffDetails', async (_, { repoPath, filePath, staged }) => {
-      const patchCmd = staged ? `git diff --staged -- "${filePath}"` : `git diff -- "${filePath}"`;
-      const patch = await runGit(patchCmd, repoPath).catch(() => '');
-      
+      const patchArgs = staged ? ['diff', '--staged', '--', filePath] : ['diff', '--', filePath];
+      const patch = await runGit(patchArgs, repoPath).catch(() => '');
+
       let original = '';
       let modified = '';
 
       if (staged) {
           try {
-              original = await runGit(`git show HEAD:"${filePath}"`, repoPath);
+              original = await runGit(['show', `HEAD:${filePath}`], repoPath);
           } catch (e) {}
           try {
-              modified = await runGit(`git show ":${filePath}"`, repoPath);
+              modified = await runGit(['show', `:${filePath}`], repoPath);
           } catch (e) {}
       } else {
           try {
-              original = await runGit(`git show ":${filePath}"`, repoPath);
+              original = await runGit(['show', `:${filePath}`], repoPath);
           } catch (e) {
           }
           try {
@@ -1105,7 +1132,7 @@ Summary:`;
           try {
               if (gitRef) {
                   console.log(`[Compare] Fetching git content for ${gitRef}:${normalizedFilePath}`);
-                  return await runGit(`git show "${gitRef}:${normalizedFilePath}"`, repoPath, { trim: false });
+                  return await runGit(['show', `${gitRef}:${normalizedFilePath}`], repoPath, { trim: false });
               } else {
                   // 1. Check if path is absolute
                   if (path.isAbsolute(filePath)) {
@@ -1154,8 +1181,8 @@ Summary:`;
 
           let patch = '';
           try {
-              // git diff --no-index returns 1 if diffs found, which exec treats as error
-              patch = await runGit(`git diff --no-index --color=never "${fileATmp}" "${fileBTmp}"`, repoPath);
+              // git diff --no-index returns 1 if diffs found, which execFile treats as error
+              patch = await runGit(['diff', '--no-index', '--color=never', fileATmp, fileBTmp], repoPath);
           } catch (e) {
               // Capture stdout from the error object if git diff found differences
               if (e.stdout || e.stderr) {
@@ -1254,11 +1281,16 @@ Summary:`;
 
   ipcMain.handle('fs:readAllFiles', async (_, directoryPath) => {
     try {
-      const files = await glob.glob('**/*', { 
-        cwd: directoryPath, 
+      const settings = await readAppSettings();
+      const excludes = settings.excludes || [];
+      let files = await glob.glob('**/*', {
+        cwd: directoryPath,
         nodir: true,
         ignore: ['**/.git/**', '**/.history/**', '**/node_modules/**', '**/dist/**', '**/.next/**']
       });
+      if (excludes.length > 0) {
+        files = files.filter(file => !isPathExcluded(file, excludes));
+      }
       return files.map(file => ({
         name: path.basename(file),
         isDirectory: false,

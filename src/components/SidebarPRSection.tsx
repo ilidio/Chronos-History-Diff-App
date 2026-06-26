@@ -5,7 +5,6 @@ import { GitPullRequest, GitMerge, ExternalLink, RefreshCw } from 'lucide-react'
 import { Button } from '@/components/ui/button';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { getConfig, setConfig } from '@/lib/electron';
-import { checkout } from '@/lib/api';
 import SidebarSection from '@/components/SidebarSection';
 
 interface PR {
